@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { randomUUID, randomBytes, scryptSync } from 'crypto';
 import session from 'express-session';
+import cookieSession from 'cookie-session';
 import nodemailer from 'nodemailer';
 import supabase from './config/db.js';
 import { syncAnimeById, syncAnimeMetadataById, mapJikanToDb } from './controllers/syncAnime.js';
@@ -98,23 +99,16 @@ app.use(cors({
 	maxAge: 86400 // 24 horas
 }));
 
-// Usar MemoryStore de express-session para evitar problemas con el store personalizado
-// En producción, se puede implementar una solución más robusta con Redis u otro store
-const sessionStore = new session.MemoryStore();
-
-// Configuración de sesiones con MemoryStore
-app.use(session({
-	store: sessionStore,
-	secret: process.env.SESSION_SECRET || 'tu_secreto_super_seguro_cambiar_en_produccion',
-	resave: false,
-	saveUninitialized: false,
-	cookie: {
-		secure: isProduction, // true en producción (HTTPS), false en desarrollo (HTTP)
-		httpOnly: true,
-		sameSite: isProduction ? 'none' : 'lax', // 'none' requiere secure: true en HTTPS
-		maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
-		domain: isProduction ? process.env.COOKIE_DOMAIN : undefined // Configurar en .env para producción
-	}
+// Usar cookie-session para sesiones sin estado (funciona en Vercel/serverless)
+// La sesión se guarda directamente en una cookie firmada
+app.use(cookieSession({
+	name: 'session',
+	keys: [process.env.SESSION_SECRET || 'tu_secreto_super_seguro_cambiar_en_produccion'],
+	maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
+	secure: isProduction,
+	httpOnly: true,
+	sameSite: isProduction ? 'none' : 'lax',
+	domain: isProduction ? process.env.COOKIE_DOMAIN : undefined
 }));
 
 // programar / inicializar la sincronización diaria de datos de anime
@@ -671,12 +665,7 @@ app.get('/api/user/update-username', async (req, res) => {
 		}
 		// actualizar el nombre de usuario en la sesión para que el cambio se refleje inmediatamente
 		req.session.user.nom = newUsername.trim();
-		req.session.save((saveErr) => {
-			if (saveErr) {
-				console.error('Error saving session after username update:', saveErr);
-			}
-			return res.json({ success: true, user: data });
-		});
+		return res.json({ success: true, user: data });
 	} catch (error) {
 		console.error('Error updating username:', error);
 		return res.status(500).json({ success: false, error: 'Error al actualizar el nombre de usuario' });
@@ -806,12 +795,7 @@ app.post('/api/user/update-email', async (req, res) => {
 
 		req.session.user.email = newEmail.trim();
 		delete req.session.emailChange;
-		req.session.save((saveErr) => {
-			if (saveErr) {
-				console.error('Error saving session after email update:', saveErr);
-			}
-			return res.json({ success: true, message: 'Correo electrónico actualizado correctamente.' });
-		});
+		return res.json({ success: true, message: 'Correo electrónico actualizado correctamente.' });
 	} catch (error) {
 		console.error('Error updating email:', error);
 		return res.status(500).json({ success: false, error: 'Error al actualizar el correo electrónico.' });
@@ -882,19 +866,11 @@ app.post('/api/login', async (req, res) => {
 		id_anime_recomanat: result.data.id_anime_recomanat,
 		img_url: result.data.img_url
 	};
-	req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
 
-	// Guardar la sesión de forma explícita
-	req.session.save((err) => {
-		if (err) {
-			console.error('Error saving session:', err);
-			return res.status(500).json({ success: false, error: 'Error al guardar la sesión.' });
-		}
-
-		return res.json({
-			success: true,
-			user: req.session.user
-		});
+	// Responder (cookie-session guarda automáticamente)
+	return res.json({
+		success: true,
+		user: req.session.user
 	});
 });
 
@@ -924,13 +900,7 @@ app.get('/api/session', async (req, res) => {
 					id_anime_recomanat: result.data.id_anime_recomanat,
 					img_url: result.data.img_url
 				};
-				req.session.save((saveErr) => {
-					if (saveErr) {
-						console.error('Error saving updated session:', saveErr);
-					}
-					return res.json({ success: true, user: req.session.user });
-				});
-				return;
+				return res.json({ success: true, user: req.session.user });
 			}
 		}
 
@@ -961,13 +931,7 @@ app.get('/api/check-session', async (req, res) => {
 				id_anime_recomanat: result.data.id_anime_recomanat,
 				img_url: result.data.img_url
 			};
-			req.session.save((saveErr) => {
-				if (saveErr) {
-					console.error('Error saving session in check-session:', saveErr);
-				}
-				return res.json({ success: true, user: req.session.user });
-			});
-			return;
+			return res.json({ success: true, user: req.session.user });
 		}
 	} catch (error) {
 		console.error('Error fetching session user info:', error);
