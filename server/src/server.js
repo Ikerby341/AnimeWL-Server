@@ -71,7 +71,10 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // Determinar si estamos en producción
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+
+// Configuración de dominio para cookies en producción
+const cookieDomain = isProduction ? process.env.COOKIE_DOMAIN : undefined;
 
 // Configuración mejorada de CORS con credenciales
 app.use(cors({
@@ -79,6 +82,7 @@ app.use(cors({
 		const allowedOrigins = [
 			'http://localhost:5173',
 			'http://localhost:3000',
+			'https://anime-wl-server-ten.vercel.app',
 			process.env.FRONTEND_URL
 		].filter(Boolean);
 
@@ -95,7 +99,7 @@ app.use(cors({
 	},
 	credentials: true,
 	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-	allowedHeaders: ['Content-Type'],
+	allowedHeaders: ['Content-Type', 'Accept'],
 	maxAge: 86400 // 24 horas
 }));
 
@@ -103,12 +107,13 @@ app.use(cors({
 // La sesión se guarda directamente en una cookie firmada
 app.use(cookieSession({
 	name: 'session',
-	keys: [process.env.SESSION_SECRET || 'tu_secreto_super_seguro_cambiar_en_produccion'],
+	keys: [process.env.SESSION_SECRET || 'tu_secreto_super_seguro_cambiar_en_produccion_32_chars_minimo'],
 	maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
 	secure: isProduction,
 	httpOnly: true,
 	sameSite: isProduction ? 'none' : 'lax',
-	domain: isProduction ? process.env.COOKIE_DOMAIN : undefined
+	domain: cookieDomain,
+	path: '/'
 }));
 
 // programar / inicializar la sincronización diaria de datos de anime
@@ -132,6 +137,17 @@ app.get('/test-db', async (req, res) => {
 		return res.status(500).json({ success: false, error });
 	}
 	res.json({ success: true, rows: data });
+});
+
+// Endpoint de debug para verificar cookies y sesión
+app.get('/api/debug-session', (req, res) => {
+	res.json({
+		cookies: req.headers.cookie,
+		session: req.session,
+		isProduction,
+		cookieDomain,
+		envKeys: Object.keys(process.env).filter(k => k.includes('SESSION') || k.includes('FRONTEND') || k.includes('COOKIE'))
+	});
 });
 
 // helper sencillo que utiliza la API pública de MyMemory para traducir.
