@@ -68,24 +68,52 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware para convertir JSON
 app.use(express.json());
-// permitir peticiones desde el cliente React en desarrollo
+
+// Determinar si estamos en producción
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Configuración mejorada de CORS con credenciales
 app.use(cors({
-	origin: [
-		'http://localhost:5173',
-		process.env.FRONTEND_URL || 'http://localhost:5173'
-	],
-	credentials: true
+	origin: function (origin, callback) {
+		const allowedOrigins = [
+			'http://localhost:5173',
+			'http://localhost:3000',
+			process.env.FRONTEND_URL
+		].filter(Boolean);
+
+		// En desarrollo, permitir requests sin origin (como desde Postman)
+		if (!origin && !isProduction) {
+			return callback(null, true);
+		}
+
+		if (allowedOrigins.indexOf(origin) !== -1 || !isProduction) {
+			callback(null, true);
+		} else {
+			callback(new Error('Not allowed by CORS'));
+		}
+	},
+	credentials: true,
+	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+	allowedHeaders: ['Content-Type'],
+	maxAge: 86400 // 24 horas
 }));
 
-// Configuración de sesiones
+// Usar MemoryStore de express-session para evitar problemas con el store personalizado
+// En producción, se puede implementar una solución más robusta con Redis u otro store
+const sessionStore = new session.MemoryStore();
+
+// Configuración de sesiones con MemoryStore
 app.use(session({
-	secret: process.env.SESSION_SECRET || 'tu_secreto_super_seguro',
+	store: sessionStore,
+	secret: process.env.SESSION_SECRET || 'tu_secreto_super_seguro_cambiar_en_produccion',
 	resave: false,
 	saveUninitialized: false,
 	cookie: {
-		secure: false, // false para desarrollo (HTTP), true para producción (HTTPS)
+		secure: isProduction, // true en producción (HTTPS), false en desarrollo (HTTP)
 		httpOnly: true,
-		maxAge: 60 * 60 * 1000 // 1 hora por defecto
+		sameSite: isProduction ? 'none' : 'lax', // 'none' requiere secure: true en HTTPS
+		maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
+		domain: isProduction ? process.env.COOKIE_DOMAIN : undefined // Configurar en .env para producción
 	}
 }));
 
@@ -643,7 +671,12 @@ app.get('/api/user/update-username', async (req, res) => {
 		}
 		// actualizar el nombre de usuario en la sesión para que el cambio se refleje inmediatamente
 		req.session.user.nom = newUsername.trim();
-		return res.json({ success: true, user: data });
+		req.session.save((saveErr) => {
+			if (saveErr) {
+				console.error('Error saving session after username update:', saveErr);
+			}
+			return res.json({ success: true, user: data });
+		});
 	} catch (error) {
 		console.error('Error updating username:', error);
 		return res.status(500).json({ success: false, error: 'Error al actualizar el nombre de usuario' });
@@ -773,7 +806,12 @@ app.post('/api/user/update-email', async (req, res) => {
 
 		req.session.user.email = newEmail.trim();
 		delete req.session.emailChange;
-		return res.json({ success: true, message: 'Correo electrónico actualizado correctamente.' });
+		req.session.save((saveErr) => {
+			if (saveErr) {
+				console.error('Error saving session after email update:', saveErr);
+			}
+			return res.json({ success: true, message: 'Correo electrónico actualizado correctamente.' });
+		});
 	} catch (error) {
 		console.error('Error updating email:', error);
 		return res.status(500).json({ success: false, error: 'Error al actualizar el correo electrónico.' });
@@ -846,22 +884,31 @@ app.post('/api/login', async (req, res) => {
 	};
 	req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
 
-	return res.json({
-		success: true,
-		user: req.session.user
+	// Guardar la sesión de forma explícita
+	req.session.save((err) => {
+		if (err) {
+			console.error('Error saving session:', err);
+			return res.status(500).json({ success: false, error: 'Error al guardar la sesión.' });
+		}
+
+		return res.json({
+			success: true,
+			user: req.session.user
+		});
 	});
 });
 
 // Verificar sesión actual
 app.get('/api/session', async (req, res) => {
-	if (!req.session.user) {
-		return res.status(401).json({ success: false, error: 'No hay sesión activa' });
-	}
+	try {
+		// Si no hay sesión, devolver 200 con user: null (no es un error)
+		if (!req.session.user) {
+			return res.json({ success: true, user: null });
+		}
 
-	const sessionUser = req.session.user;
+		const sessionUser = req.session.user;
 
-	if (sessionUser.id_anime_preferit == null || sessionUser.id_anime_recomanat == null || sessionUser.img_url == null) {
-		try {
+		if (sessionUser.id_anime_preferit == null || sessionUser.id_anime_recomanat == null || sessionUser.img_url == null) {
 			const result = await findUserByNom(sessionUser.nom);
 			if (result.error) {
 				console.error('Error fetching user session info:', result.error);
@@ -877,15 +924,21 @@ app.get('/api/session', async (req, res) => {
 					id_anime_recomanat: result.data.id_anime_recomanat,
 					img_url: result.data.img_url
 				};
-				return res.json({ success: true, user: req.session.user });
+				req.session.save((saveErr) => {
+					if (saveErr) {
+						console.error('Error saving updated session:', saveErr);
+					}
+					return res.json({ success: true, user: req.session.user });
+				});
+				return;
 			}
-		} catch (error) {
-			console.error('Error fetching session user info:', error);
-			return res.status(500).json({ success: false, error: 'Error al comprobar la sesión' });
 		}
-	}
 
-	return res.json({ success: true, user: sessionUser });
+		return res.json({ success: true, user: sessionUser });
+	} catch (error) {
+		console.error('Error in /api/session:', error);
+		return res.status(500).json({ success: false, error: 'Error interno del servidor' });
+	}
 });
 
 app.get('/api/check-session', async (req, res) => {
@@ -908,6 +961,13 @@ app.get('/api/check-session', async (req, res) => {
 				id_anime_recomanat: result.data.id_anime_recomanat,
 				img_url: result.data.img_url
 			};
+			req.session.save((saveErr) => {
+				if (saveErr) {
+					console.error('Error saving session in check-session:', saveErr);
+				}
+				return res.json({ success: true, user: req.session.user });
+			});
+			return;
 		}
 	} catch (error) {
 		console.error('Error fetching session user info:', error);
