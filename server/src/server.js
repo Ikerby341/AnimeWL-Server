@@ -975,14 +975,8 @@ app.post('/api/user/anime', async (req, res) => {
 
 // Logout
 app.post('/api/logout', (req, res) => {
-	req.session.destroy((err) => {
-		if (err) {
-			console.error('Error destroying session:', err);
-			return res.status(500).json({ success: false, error: 'Error al cerrar sesión' });
-		}
-		res.clearCookie('connect.sid');
-		return res.json({ success: true, message: 'Sesión cerrada correctamente' });
-	});
+	req.session = null;
+	return res.json({ success: true, message: 'Sesión cerrada correctamente' });
 });
 
 app.post('/api/update-profile-picture', async (req, res) => {
