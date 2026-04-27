@@ -67,53 +67,29 @@ const __dirname = path.dirname(__filename);			// Ruta de la carpeta on es troba 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware para convertir JSON
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Middleware JSON
 app.use(express.json());
 
-// Determinar si estamos en producción
-const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+app.set('trust proxy', 1);
 
-// Configuración de dominio para cookies en producción
-const cookieDomain = isProduction ? process.env.COOKIE_DOMAIN : undefined;
-
-// Configuración mejorada de CORS con credenciales
 app.use(cors({
-	origin: function (origin, callback) {
-		const allowedOrigins = [
-			'http://localhost:5173',
-			'http://localhost:3000',
-			'https://anime-wl-server-ten.vercel.app',
-			process.env.FRONTEND_URL
-		].filter(Boolean);
-
-		// En desarrollo, permitir requests sin origin (como desde Postman)
-		if (!origin && !isProduction) {
-			return callback(null, true);
-		}
-
-		if (allowedOrigins.indexOf(origin) !== -1 || !isProduction) {
-			callback(null, true);
-		} else {
-			callback(new Error('Not allowed by CORS'));
-		}
-	},
-	credentials: true,
-	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-	allowedHeaders: ['Content-Type', 'Accept'],
-	maxAge: 86400 // 24 horas
+	origin: [
+		'https://animewl.cat',
+		'http://localhost:5173'
+	],
+	credentials: true
 }));
 
-// Usar cookie-session para sesiones sin estado (funciona en Vercel/serverless)
-// La sesión se guarda directamente en una cookie firmada
 app.use(cookieSession({
 	name: 'session',
-	keys: [process.env.SESSION_SECRET || 'tu_secreto_super_seguro_cambiar_en_produccion_32_chars_minimo'],
-	maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
+	keys: [process.env.SESSION_SECRET],
+	maxAge: 30 * 24 * 60 * 60 * 1000,
+
 	secure: isProduction,
 	httpOnly: true,
-	sameSite: isProduction ? 'none' : 'lax',
-	domain: cookieDomain,
-	path: '/'
+	sameSite: isProduction ? 'none' : 'lax'
 }));
 
 // programar / inicializar la sincronización diaria de datos de anime
