@@ -245,8 +245,13 @@ export async function upsertChapters(id_anime, episodeNumbers = [], options = { 
                 numero: num,
                 duracio_minuts: duration || null,
             };
+            console.log(`upsertChapters: inserting episode ${num} for anime ${id_anime}`, rec);
             const { error } = await supabase.from('capitol').upsert(rec, { onConflict: 'id_capitol' });
-            if (error) console.error('upsert chapter error', error, 'num:', num);
+            if (error) {
+                console.error('upsert chapter error', error, 'num:', num);
+            } else {
+                console.log(`upsertChapters: episode ${num} saved successfully`);
+            }
         }
     } catch (err) {
         console.error('upsertChapters error', err);
@@ -276,23 +281,41 @@ export async function listAnimes(genre = null, limit = null) {
 
     if (animes.length > 0) {
         const ids = animes.map((a) => a.id_anime);
-        const { data: capRows, error: capErr } = await supabase
-            .from('capitol')
-            .select('id_anime')
-            .in('id_anime', ids);
+        console.log('listAnimes: fetching episode counts for', ids.length, 'animes, ids:', ids.slice(0, 5));
 
-        if (capErr) {
-            console.error('episode count query error', capErr);
-        } else if (capRows) {
-            const counts = {};
-            capRows.forEach((r) => {
-                const key = String(r.id_anime);
-                counts[key] = (counts[key] || 0) + 1;
-            });
-            animes.forEach((a) => {
-                a.episodeCount = counts[String(a.id_anime)] || 0;
-            });
+        // Obtener el máximo episodio para cada anime
+        // Dividir en chunks de 100 por el límite de Supabase
+        const maxByAnime = {};
+        const chunkSize = 100;
+
+        for (let i = 0; i < ids.length; i += chunkSize) {
+            const chunk = ids.slice(i, i + chunkSize);
+            console.log('  fetching chunk', i / chunkSize + 1, 'with ids:', chunk);
+
+            const { data: maxEpisodes, error: maxErr } = await supabase
+                .from('capitol')
+                .select('id_anime, numero')
+                .in('id_anime', chunk);
+
+            if (maxErr) {
+                console.error('  episode max query error:', maxErr);
+            } else {
+                console.log('  maxEpisodes raw:', maxEpisodes);
+                maxEpisodes.forEach((r) => {
+                    const key = String(r.id_anime);
+                    if (!maxByAnime[key] || r.numero > maxByAnime[key]) {
+                        maxByAnime[key] = r.numero;
+                    }
+                });
+            }
         }
+
+        console.log('  maxByAnime:', maxByAnime);
+
+        animes.forEach((a) => {
+            a.episodeCount = maxByAnime[String(a.id_anime)] || 0;
+        });
+        console.log('  final episodeCounts:', animes.map(a => ({ id: a.id_anime, count: a.episodeCount })));
     }
 
     return animes;

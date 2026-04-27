@@ -143,22 +143,29 @@ export async function syncAnimeById(idAnime) {
 
     const apiEpisodeCount = Number.isFinite(Number(data.episodes)) ? Number(data.episodes) : null;
 
+    console.log(`syncAnimeById [${idAnime}]: API reports ${apiEpisodeCount} episodes`);
+
     // número del último episodio almacenado (no conteo de filas, para evitar
     // fallos si hay huecos) — es la referencia correcta para saber qué falta
     const maxStoredEpisode = await getMaxStoredEpisode(record.id_anime);
+    console.log(`syncAnimeById [${idAnime}]: max stored episode = ${maxStoredEpisode}`);
 
     try {
         const needsSync =
             (apiEpisodeCount !== null && apiEpisodeCount > maxStoredEpisode) ||
             (apiEpisodeCount === null && maxStoredEpisode === 0);
 
+        console.log(`syncAnimeById [${idAnime}]: needsSync = ${needsSync}`);
+
         if (needsSync) {
             // solo pedimos los números que nos faltan, empezando desde la página correcta;
             // upsertChapters llama al endpoint individual /episodes/{num} para cada uno
             const newNumbers = await fetchNewEpisodeNumbers(record.id_anime, maxStoredEpisode);
+            console.log(`syncAnimeById [${idAnime}]: new episode numbers =`, newNumbers);
             if (newNumbers.length) {
                 await upsertChapters(record.id_anime, newNumbers, { replaceExisting: false });
                 await touchAnimeLastUpdate(record.id_anime);
+                console.log(`syncAnimeById [${idAnime}]: chapters saved successfully`);
             }
         } else if (apiEpisodeCount !== null && apiEpisodeCount < maxStoredEpisode) {
             console.warn(
