@@ -11,7 +11,7 @@ import supabase from './config/db.js';
 import { syncAnimeById, syncAnimeMetadataById, mapJikanToDb } from './controllers/syncAnime.js';
 import { findAnimeById, listAnimes, testDbConnection } from './models/anime_model.js';
 import { findCommentsByAnimeId, insertComment } from './models/comment_model.js';
-import { registerUser, findUserByNom, findUserByEmail, updateUserProfilePicture, updateUserAnimeChoice, updateUsername, updateUserPassword, updateUserEmail } from './models/users_model.js';
+import { registerUser, findUserByNom, findUserByEmail, updateUserProfilePicture, updateUserAnimeChoice, updateUsername, updateUserPassword, updateUserEmail, updateResetPasswordToken, findUserByResetToken, clearResetPasswordToken } from './models/users_model.js';
 import { findRatingSummaryByAnimeId, findRatingByAnimeAndUser, saveRating } from './models/rating_model.js';
 import { findProgressByAnimeAndUser, saveProgress, getUserStats } from './models/progress_model.js';
 import { findFavoritesByUser, findFavoriteById, addFavorite, removeFavorite, updateFavoriteStatus } from './models/favorites_model.js';
@@ -57,6 +57,25 @@ async function sendVerificationEmail(to, code) {
 		subject: 'Código de verificación para cambio de correo',
 		text: `Tu código de verificación es: ${code}. Introduce este código en la sección de configuración para cambiar tu correo electrónico.`,
 		html: `<p>Tu código de verificación es: <strong>${code}</strong></p><p>Introduce este código en la sección de configuración para cambiar tu correo electrónico.</p>`
+	};
+	return transporter.sendMail(mailOptions);
+}
+
+async function sendPasswordResetEmail(to, resetToken) {
+	const transporter = getMailTransporter();
+	const from = process.env.EMAIL_FROM || process.env.EMAIL_SMTP_USER;
+	const frontendUrl = process.env.FRONTEND_URL || (isProduction ? 'https://animewl.cat' : 'http://localhost:5173');
+	const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+	const mailOptions = {
+		from,
+		to,
+		subject: 'Restablecer tu contraseña de AnimeWL',
+		text: `Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace para crear una nueva contraseña: ${resetUrl}\n\nSi no solicitaste esto, ignora este correo.`,
+		html: `<p>Has solicitado restablecer tu contraseña.</p>
+			<p>Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
+			<p><a href="${resetUrl}">${resetUrl}</a></p>
+			<p>Si no solicitaste esto, ignora este correo.</p>`
 	};
 	return transporter.sendMail(mailOptions);
 }
@@ -977,6 +996,146 @@ app.post('/api/user/anime', async (req, res) => {
 app.post('/api/logout', (req, res) => {
 	req.session = null;
 	return res.json({ success: true, message: 'Sesión cerrada correctamente' });
+});
+
+// Solicitar recuperación de contraseña
+app.post('/api/forgot-password', async (req, res) => {
+	const { email } = req.body;
+
+	if (!email) {
+		return res.status(400).json({ success: false, error: 'El correo electrónico es requerido.' });
+	}
+
+	if (!validateEmail(email)) {
+		return res.status(400).json({ success: false, error: 'El correo electrónico no es válido.' });
+	}
+
+	try {
+		// Buscar usuario por email
+		const result = await findUserByEmail(email.trim());
+
+		if (result.error) {
+			console.error('Error finding user by email:', result.error);
+			return res.status(500).json({ success: false, error: 'Error al buscar el usuario.' });
+		}
+
+		// No revelar si el usuario existe o no por seguridad
+		if (!result.data) {
+			return res.json({ success: true, message: 'Si el correo existe, recibirás un enlace para restablecer tu contraseña.' });
+		}
+
+		// Generar token de recuperación
+		const resetToken = randomUUID();
+
+		// Guardar token en la base de datos
+		const updateResult = await updateResetPasswordToken(email.trim(), resetToken);
+
+		if (updateResult.error) {
+			console.error('Error saving reset token:', updateResult.error);
+			return res.status(500).json({ success: false, error: 'Error al generar el token de recuperación.' });
+		}
+
+		// Enviar correo con el enlace
+		await sendPasswordResetEmail(email.trim(), resetToken);
+
+		return res.json({ success: true, message: 'Si el correo existe, recibirás un enlace para restablecer tu contraseña.' });
+	} catch (error) {
+		console.error('Error in forgot-password:', error);
+		return res.status(500).json({ success: false, error: 'Error al procesar la solicitud.' });
+	}
+});
+
+// Verificar token de recuperación
+app.get('/api/verify-reset-token', async (req, res) => {
+	const { token } = req.query;
+
+	if (!token) {
+		return res.status(400).json({ success: false, error: 'Token requerido.' });
+	}
+
+	try {
+		const result = await findUserByResetToken(token);
+
+		if (result.error) {
+			console.error('Error verifying reset token:', result.error);
+			return res.status(500).json({ success: false, error: 'Error al verificar el token.' });
+		}
+
+		if (!result.data) {
+			return res.status(400).json({ success: false, error: 'Token inválido o expirado.' });
+		}
+
+		// Verificar si el token ha expirado
+		if (result.data.reset_password_token_expiredate) {
+			const expirationDate = new Date(result.data.reset_password_token_expiredate);
+			if (new Date() > expirationDate) {
+				return res.status(400).json({ success: false, error: 'Token inválido o expirado.' });
+			}
+		}
+
+		return res.json({ success: true, message: 'Token válido.' });
+	} catch (error) {
+		console.error('Error in verify-reset-token:', error);
+		return res.status(500).json({ success: false, error: 'Error al verificar el token.' });
+	}
+});
+
+// Restablecer contraseña
+app.post('/api/reset-password', async (req, res) => {
+	const { token, newPassword, confirmPassword } = req.body;
+
+	if (!token || !newPassword || !confirmPassword) {
+		return res.status(400).json({ success: false, error: 'Todos los campos son requeridos.' });
+	}
+
+	if (newPassword !== confirmPassword) {
+		return res.status(400).json({ success: false, error: 'Las contraseñas no coinciden.' });
+	}
+
+	if (newPassword.length < 6) {
+		return res.status(400).json({ success: false, error: 'La contraseña debe tener al menos 6 caracteres.' });
+	}
+
+	try {
+		// Buscar usuario por token
+		const result = await findUserByResetToken(token);
+
+		if (result.error) {
+			console.error('Error finding user by reset token:', result.error);
+			return res.status(500).json({ success: false, error: 'Error al buscar el usuario.' });
+		}
+
+		if (!result.data) {
+			return res.status(400).json({ success: false, error: 'Token inválido o expirado.' });
+		}
+
+		// Verificar si el token ha expirado
+		if (result.data.reset_password_token_expiredate) {
+			const expirationDate = new Date(result.data.reset_password_token_expiredate);
+			if (new Date() > expirationDate) {
+				return res.status(400).json({ success: false, error: 'Token inválido o expirado.' });
+			}
+		}
+
+		// Hashear la nueva contraseña
+		const newHashedPassword = hashPassword(newPassword);
+
+		// Actualizar la contraseña
+		const updateResult = await updateUserPassword(result.data.id_usuari, newHashedPassword);
+
+		if (updateResult.error) {
+			console.error('Error updating password:', updateResult.error);
+			return res.status(500).json({ success: false, error: 'Error al actualizar la contraseña.' });
+		}
+
+		// Limpiar el token de recuperación
+		await clearResetPasswordToken(result.data.id_usuari);
+
+		return res.json({ success: true, message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión con tu nueva contraseña.' });
+	} catch (error) {
+		console.error('Error in reset-password:', error);
+		return res.status(500).json({ success: false, error: 'Error al restablecer la contraseña.' });
+	}
 });
 
 app.post('/api/update-profile-picture', async (req, res) => {

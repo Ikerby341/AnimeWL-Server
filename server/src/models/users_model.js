@@ -99,6 +99,30 @@ export async function updateUserEmail(id_usuari, newEmail) {
     return await supabase.from('usuari').update({ email: newEmail }).eq('id_usuari', id_usuari).select().maybeSingle();
 }
 
-export async function updateUserPassword(id_usuari, newContrasenya) {
-    return await supabase.from('usuari').update({ contrasenya: newContrasenya }).eq('id_usuari', id_usuari).select().maybeSingle();
+export async function updateUserPassword(id_usuari, newPassword) {
+    return await supabase.from('usuari').update({ contrasenya: newPassword }).eq('id_usuari', id_usuari).select().maybeSingle();
+}
+
+export async function updateResetPasswordToken(email, token) {
+    // Token expira en 15 minutos
+    const expirationDate = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    return await supabase.from('usuari').update({
+        reset_password_token: token,
+        reset_password_token_expiredate: expirationDate
+    }).eq('email', email).select().maybeSingle();
+}
+
+export async function findUserByResetToken(token) {
+    return await supabase
+        .from('usuari')
+        .select('id_usuari, nom, email, reset_password_token, reset_password_token_expiredate')
+        .eq('reset_password_token', token)
+        .maybeSingle();
+}
+
+export async function clearResetPasswordToken(id_usuari) {
+    return await supabase.from('usuari').update({
+        reset_password_token: null,
+        reset_password_token_expiredate: null
+    }).eq('id_usuari', id_usuari).select().maybeSingle();
 }
