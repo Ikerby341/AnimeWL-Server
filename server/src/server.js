@@ -11,10 +11,10 @@ import supabase from './config/db.js';
 import { syncAnimeById, syncAnimeMetadataById, mapJikanToDb } from './controllers/syncAnime.js';
 import { findAnimeById, listAnimes, testDbConnection } from './models/anime_model.js';
 import { findCommentsByAnimeId, insertComment } from './models/comment_model.js';
-import { registerUser, findUserByNom, findUserByEmail, updateUserProfilePicture, updateUserAnimeChoice, updateUsername, updateUserPassword, updateUserEmail, updateResetPasswordToken, findUserByResetToken, clearResetPasswordToken } from './models/users_model.js';
+import { registerUser, findUserByNom, findUserByEmail, updateUserProfilePicture, updateUserAnimeChoice, updateUsername, updateUserPassword, updateUserEmail, updateResetPasswordToken, findUserByResetToken, clearResetPasswordToken, findPublicUserById } from './models/users_model.js';
 import { findRatingSummaryByAnimeId, findRatingByAnimeAndUser, saveRating } from './models/rating_model.js';
 import { findProgressByAnimeAndUser, saveProgress, getUserStats } from './models/progress_model.js';
-import { findFavoritesByUser, findFavoriteById, addFavorite, removeFavorite, updateFavoriteStatus } from './models/favorites_model.js';
+import { findFavoritesByUser, findFavoriteById, addFavorite, removeFavorite, updateFavoriteStatus, findPublicFavoritesByUser } from './models/favorites_model.js';
 
 function hashPassword(password) {
 	const salt = randomBytes(16).toString('hex');
@@ -434,6 +434,99 @@ app.get('/api/user/stats', async (req, res) => {
 	}
 });
 
+// Función auxiliar para obtener el perfil público de un usuario
+async function getPublicProfile(userId) {
+	if (!userId) {
+		return null;
+	}
+
+	try {
+		const { data: user, error } = await findPublicUserById(userId);
+
+		if (error || !user) {
+			return null;
+		}
+
+		// Devolver datos públicos del usuario
+		return {
+			id_usuari: user.id_usuari,
+			nom: user.nom,
+			img_url: user.img_url,
+			id_anime_preferit: user.id_anime_preferit,
+			id_anime_recomanat: user.id_anime_recomanat
+		};
+	} catch (err) {
+		console.error('getPublicProfile error', err);
+		return null;
+	}
+}
+
+// Endpoint para obtener el perfil público de un usuario
+app.get('/api/user/:id/public', async (req, res) => {
+	const { id } = req.params;
+
+	if (!id) {
+		return res.status(400).json({ success: false, error: 'User ID is required' });
+	}
+
+	const user = await getPublicProfile(id);
+
+	if (!user) {
+		return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+	}
+
+	return res.json({ success: true, user });
+});
+
+// Alias endpoints para compatibilidad
+app.get('/api/users/:id/public', async (req, res) => {
+	const { id } = req.params;
+
+	if (!id) {
+		return res.status(400).json({ success: false, error: 'User ID is required' });
+	}
+
+	const user = await getPublicProfile(id);
+
+	if (!user) {
+		return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+	}
+
+	return res.json({ success: true, user });
+});
+
+app.get('/api/profile/:id', async (req, res) => {
+	const { id } = req.params;
+
+	if (!id) {
+		return res.status(400).json({ success: false, error: 'User ID is required' });
+	}
+
+	const user = await getPublicProfile(id);
+
+	if (!user) {
+		return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+	}
+
+	return res.json({ success: true, user, profile: user });
+});
+
+app.get('/api/user/:id', async (req, res) => {
+	const { id } = req.params;
+
+	if (!id) {
+		return res.status(400).json({ success: false, error: 'User ID is required' });
+	}
+
+	const user = await getPublicProfile(id);
+
+	if (!user) {
+		return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+	}
+
+	return res.json({ success: true, user });
+});
+
 app.post('/api/anime/:id/progress', async (req, res) => {
 	const { id } = req.params;
 	const { capitols_vistos } = req.body;
@@ -514,6 +607,72 @@ app.get('/api/user/favorites', async (req, res) => {
 		return res.json({ success: true, favorites: enrichedFavorites });
 	} catch (err) {
 		console.error('GET /api/user/favorites error', err);
+		return res.status(500).json({ success: false, error: err.message });
+	}
+});
+
+// Obtener favoritos públicos del usuario (solo "Viendo")
+app.get('/api/user/:userId/favorites/public', async (req, res) => {
+	const { userId } = req.params;
+
+	if (!userId) {
+		return res.status(400).json({ success: false, error: 'User ID is required' });
+	}
+
+	try {
+		const favorites = await findPublicFavoritesByUser(userId);
+		return res.json({ success: true, favorites });
+	} catch (err) {
+		console.error('GET /api/user/:userId/favorites/public error', err);
+		return res.status(500).json({ success: false, error: err.message });
+	}
+});
+
+// Alias endpoints para compatibilidad
+app.get('/api/users/:userId/favorites/public', async (req, res) => {
+	const { userId } = req.params;
+
+	if (!userId) {
+		return res.status(400).json({ success: false, error: 'User ID is required' });
+	}
+
+	try {
+		const favorites = await findPublicFavoritesByUser(userId);
+		return res.json({ success: true, favorites });
+	} catch (err) {
+		console.error('GET /api/users/:userId/favorites/public error', err);
+		return res.status(500).json({ success: false, error: err.message });
+	}
+});
+
+app.get('/api/profile/:userId/favorites', async (req, res) => {
+	const { userId } = req.params;
+
+	if (!userId) {
+		return res.status(400).json({ success: false, error: 'User ID is required' });
+	}
+
+	try {
+		const favorites = await findPublicFavoritesByUser(userId);
+		return res.json({ success: true, favorites });
+	} catch (err) {
+		console.error('GET /api/profile/:userId/favorites error', err);
+		return res.status(500).json({ success: false, error: err.message });
+	}
+});
+
+app.get('/api/user/:userId/favorites', async (req, res) => {
+	const { userId } = req.params;
+
+	if (!userId) {
+		return res.status(400).json({ success: false, error: 'User ID is required' });
+	}
+
+	try {
+		const favorites = await findPublicFavoritesByUser(userId);
+		return res.json({ success: true, favorites });
+	} catch (err) {
+		console.error('GET /api/user/:userId/favorites error', err);
 		return res.status(500).json({ success: false, error: err.message });
 	}
 });

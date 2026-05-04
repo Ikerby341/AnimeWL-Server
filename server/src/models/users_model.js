@@ -126,3 +126,11 @@ export async function clearResetPasswordToken(id_usuari) {
         reset_password_token_expiredate: null
     }).eq('id_usuari', id_usuari).select().maybeSingle();
 }
+
+export async function findPublicUserById(id_usuari) {
+    return await supabase
+        .from('usuari')
+        .select('id_usuari, nom, img_url, id_anime_preferit, id_anime_recomanat')
+        .eq('id_usuari', id_usuari)
+        .maybeSingle();
+}

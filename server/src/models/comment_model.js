@@ -15,7 +15,12 @@ export async function findCommentsByAnimeId(id_anime) {
     }
 
     return (data || []).map((comment) => ({
-        ...comment,
+        id_comentari: comment.id_comentari,
+        id_usuari: comment.id_usuari,
+        id_anime: comment.id_anime,
+        id_capitol: comment.id_capitol,
+        contingut: comment.contingut,
+        data_hora: comment.data_hora,
         userName: comment.usuari?.nom || 'Anónimo',
         userImg: comment.usuari?.img_url || null,
     }));
@@ -34,7 +39,12 @@ export async function insertComment(comment) {
     }
 
     return {
-        ...data,
+        id_comentari: data.id_comentari,
+        id_usuari: data.id_usuari,
+        id_anime: data.id_anime,
+        id_capitol: data.id_capitol,
+        contingut: data.contingut,
+        data_hora: data.data_hora,
         userName: data.usuari?.nom || 'Anónimo',
         userImg: data.usuari?.img_url || null,
     };

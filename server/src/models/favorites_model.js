@@ -218,3 +218,101 @@ export async function updateFavoriteStatus(id_usuari, id_anime, estat) {
 
     return data;
 }
+
+export async function findPublicFavoritesByUser(id_usuari) {
+    if (!id_usuari) return [];
+
+    try {
+        // Obtener favoritos con estat === "Viendo"
+        const { data, error } = await supabase
+            .from('llista')
+            .select('id_llista, id_usuari, llista_anime(id_anime, estat)')
+            .eq('id_usuari', id_usuari);
+
+        if (error) {
+            console.error('findPublicFavoritesByUser error', error);
+            throw error;
+        }
+
+        // Filtrar solo los con estat === "Viendo"
+        const viewingFavorites = (data || [])
+            .flatMap((list) =>
+                (list.llista_anime || [])
+                    .filter((item) => item.estat === 'Viendo')
+                    .map((item) => ({
+                        id_llista: list.id_llista,
+                        id_usuari: list.id_usuari,
+                        id_anime: item.id_anime,
+                        estat: item.estat
+                    }))
+            );
+
+        if (viewingFavorites.length === 0) {
+            return [];
+        }
+
+        // Obtener datos del anime para cada favorito
+        const animeIds = viewingFavorites.map((fav) => fav.id_anime);
+        const { data: animeData, error: animeError } = await supabase
+            .from('anime')
+            .select('id_anime, titol, imatge_portada')
+            .in('id_anime', animeIds);
+
+        if (animeError) {
+            console.error('findPublicFavoritesByUser anime lookup error', animeError);
+            throw animeError;
+        }
+
+        // Crear un mapa de anime por id
+        const animeMap = {};
+        (animeData || []).forEach((anime) => {
+            animeMap[anime.id_anime] = {
+                id_anime: anime.id_anime,
+                titol: anime.titol,
+                imatge_portada: anime.imatge_portada
+            };
+        });
+
+        // Obtener progreso para cada favorito
+        const enrichedData = await Promise.all(
+            viewingFavorites.map(async (fav) => {
+                try {
+                    const { data: progress } = await supabase
+                        .from('progres')
+                        .select('capitols_vistos')
+                        .eq('id_usuari', id_usuari)
+                        .eq('id_anime', fav.id_anime)
+                        .maybeSingle();
+
+                    return {
+                        id_anime: fav.id_anime,
+                        estat: fav.estat,
+                        capitols_vistos: progress?.capitols_vistos || 0,
+                        anime: animeMap[fav.id_anime] || {
+                            id_anime: fav.id_anime,
+                            titol: 'Anime desconocido',
+                            imatge_portada: null
+                        }
+                    };
+                } catch (err) {
+                    console.error('Error fetching progress for public favorite:', err);
+                    return {
+                        id_anime: fav.id_anime,
+                        estat: fav.estat,
+                        capitols_vistos: 0,
+                        anime: animeMap[fav.id_anime] || {
+                            id_anime: fav.id_anime,
+                            titol: 'Anime desconocido',
+                            imatge_portada: null
+                        }
+                    };
+                }
+            })
+        );
+
+        return enrichedData;
+    } catch (err) {
+        console.error('findPublicFavoritesByUser exception', err);
+        return [];
+    }
+}
