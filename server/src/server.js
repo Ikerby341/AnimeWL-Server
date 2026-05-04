@@ -28,23 +28,34 @@ function validateEmail(email) {
 
 function getMailTransporter() {
 	const host = process.env.EMAIL_SMTP_HOST;
-	const port = process.env.EMAIL_SMTP_PORT;
+	const port = Number(process.env.EMAIL_SMTP_PORT);
 	const user = process.env.EMAIL_SMTP_USER;
 	const pass = process.env.EMAIL_SMTP_PASS;
 	const secure = process.env.EMAIL_SMTP_SECURE === 'true';
 
-	if (!host || !port || !user || !pass) {
+	if (!host || !user || !pass || !process.env.EMAIL_SMTP_PORT) {
 		throw new Error('Faltan variables de entorno de correo electrónico (EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, EMAIL_SMTP_USER, EMAIL_SMTP_PASS)');
+	}
+
+	if (!Number.isInteger(port)) {
+		throw new Error('EMAIL_SMTP_PORT debe ser un numero. Usa un solo puerto, por ejemplo 465 o 587.');
+	}
+
+	if (process.env.RENDER && [25, 465, 587].includes(port)) {
+		console.warn(`Render puede bloquear el puerto SMTP ${port} en servicios gratuitos. Usa un plan de pago, una API HTTP de email o un proveedor SMTP con puerto alternativo como 2525.`);
 	}
 
 	return nodemailer.createTransport({
 		host,
-		port: Number(port),
+		port,
 		secure,
 		auth: {
 			user,
 			pass
-		}
+		},
+		connectionTimeout: 15000,
+		greetingTimeout: 15000,
+		socketTimeout: 15000
 	});
 }
 
