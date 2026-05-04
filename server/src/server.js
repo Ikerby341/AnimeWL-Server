@@ -514,40 +514,7 @@ async function getPublicProfile(userId) {
 }
 
 // Endpoint para obtener el perfil público de un usuario
-app.get('/api/user/:id/public', async (req, res) => {
-	const { id } = req.params;
-
-	if (!id) {
-		return res.status(400).json({ success: false, error: 'User ID is required' });
-	}
-
-	const user = await getPublicProfile(id);
-
-	if (!user) {
-		return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
-	}
-
-	return res.json({ success: true, user });
-});
-
-// Alias endpoints para compatibilidad
-app.get('/api/users/:id/public', async (req, res) => {
-	const { id } = req.params;
-
-	if (!id) {
-		return res.status(400).json({ success: false, error: 'User ID is required' });
-	}
-
-	const user = await getPublicProfile(id);
-
-	if (!user) {
-		return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
-	}
-
-	return res.json({ success: true, user });
-});
-
-app.get('/api/profile/:id', async (req, res) => {
+async function handlePublicProfileRequest(req, res) {
 	const { id } = req.params;
 
 	if (!id) {
@@ -561,23 +528,14 @@ app.get('/api/profile/:id', async (req, res) => {
 	}
 
 	return res.json({ success: true, user, profile: user });
-});
+}
 
-app.get('/api/user/:id', async (req, res) => {
-	const { id } = req.params;
-
-	if (!id) {
-		return res.status(400).json({ success: false, error: 'User ID is required' });
-	}
-
-	const user = await getPublicProfile(id);
-
-	if (!user) {
-		return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
-	}
-
-	return res.json({ success: true, user });
-});
+app.get([
+	'/api/user/:id/public',
+	'/api/users/:id/public',
+	'/api/profile/:id',
+	'/api/user/:id'
+], handlePublicProfileRequest);
 
 app.post('/api/anime/:id/progress', async (req, res) => {
 	const { id } = req.params;
@@ -623,7 +581,7 @@ app.post('/api/anime/:id/progress', async (req, res) => {
 });
 
 // Obtener favoritos públicos del usuario (solo "Viendo")
-app.get('/api/user/:userId/favorites/public', async (req, res) => {
+async function handlePublicFavoritesRequest(req, res) {
 	const { userId } = req.params;
 
 	if (!userId) {
@@ -634,43 +592,16 @@ app.get('/api/user/:userId/favorites/public', async (req, res) => {
 		const favorites = await findPublicFavoritesByUser(userId);
 		return res.json({ success: true, favorites });
 	} catch (err) {
-		console.error('GET /api/user/:userId/favorites/public error', err);
+		console.error('GET public user favorites error', err);
 		return res.status(500).json({ success: false, error: err.message });
 	}
-});
+}
 
-// Alias endpoints para compatibilidad
-app.get('/api/users/:userId/favorites/public', async (req, res) => {
-	const { userId } = req.params;
-
-	if (!userId) {
-		return res.status(400).json({ success: false, error: 'User ID is required' });
-	}
-
-	try {
-		const favorites = await findPublicFavoritesByUser(userId);
-		return res.json({ success: true, favorites });
-	} catch (err) {
-		console.error('GET /api/users/:userId/favorites/public error', err);
-		return res.status(500).json({ success: false, error: err.message });
-	}
-});
-
-app.get('/api/profile/:userId/favorites', async (req, res) => {
-	const { userId } = req.params;
-
-	if (!userId) {
-		return res.status(400).json({ success: false, error: 'User ID is required' });
-	}
-
-	try {
-		const favorites = await findPublicFavoritesByUser(userId);
-		return res.json({ success: true, favorites });
-	} catch (err) {
-		console.error('GET /api/profile/:userId/favorites error', err);
-		return res.status(500).json({ success: false, error: err.message });
-	}
-});
+app.get([
+	'/api/user/:userId/favorites/public',
+	'/api/users/:userId/favorites/public',
+	'/api/profile/:userId/favorites'
+], handlePublicFavoritesRequest);
 
 // Obtener todos los favoritos de un usuario (privado y público)
 // IMPORTANTE: Este debe ir DESPUÉS de los endpoints más específicos (/public, /profile, etc)
