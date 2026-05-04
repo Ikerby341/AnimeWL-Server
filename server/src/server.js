@@ -434,6 +434,47 @@ app.get('/api/user/stats', async (req, res) => {
 	}
 });
 
+// Obtener favoritos del usuario (privado, requiere sesión)
+app.get('/api/user/favorites', async (req, res) => {
+	if (!req.session.user) {
+		return res.status(401).json({ success: false, error: 'No hay sesión activa' });
+	}
+
+	try {
+		const favorites = await findFavoritesByUser(req.session.user.id_usuari);
+
+		// Enriquecer con datos del anime y valoración media
+		const enrichedFavorites = await Promise.all(
+			favorites.map(async (fav) => {
+				try {
+					const anime = await findAnimeById(fav.id_anime);
+					let ratingData = { average: 0, count: 0 };
+					try {
+						ratingData = await findRatingSummaryByAnimeId(fav.id_anime);
+					} catch (err) {
+						console.error(`Error loading rating for anime ${fav.id_anime}:`, err);
+					}
+					return {
+						...fav,
+						anime: anime ? { ...anime, rating: ratingData } : null
+					};
+				} catch (err) {
+					console.error(`Error loading anime ${fav.id_anime}:`, err);
+					return {
+						...fav,
+						anime: null
+					};
+				}
+			})
+		);
+
+		return res.json({ success: true, favorites: enrichedFavorites });
+	} catch (err) {
+		console.error('GET /api/user/favorites error', err);
+		return res.status(500).json({ success: false, error: err.message });
+	}
+});
+
 // Función auxiliar para obtener el perfil público de un usuario
 async function getPublicProfile(userId) {
 	if (!userId) {
@@ -570,47 +611,6 @@ app.post('/api/anime/:id/progress', async (req, res) => {
 	}
 });
 
-// Obtener favoritos del usuario
-app.get('/api/user/favorites', async (req, res) => {
-	if (!req.session.user) {
-		return res.status(401).json({ success: false, error: 'No hay sesión activa' });
-	}
-
-	try {
-		const favorites = await findFavoritesByUser(req.session.user.id_usuari);
-
-		// Enriquecer con datos del anime y valoración media
-		const enrichedFavorites = await Promise.all(
-			favorites.map(async (fav) => {
-				try {
-					const anime = await findAnimeById(fav.id_anime);
-					let ratingData = { average: 0, count: 0 };
-					try {
-						ratingData = await findRatingSummaryByAnimeId(fav.id_anime);
-					} catch (err) {
-						console.error(`Error loading rating for anime ${fav.id_anime}:`, err);
-					}
-					return {
-						...fav,
-						anime: anime ? { ...anime, rating: ratingData } : null
-					};
-				} catch (err) {
-					console.error(`Error loading anime ${fav.id_anime}:`, err);
-					return {
-						...fav,
-						anime: null
-					};
-				}
-			})
-		);
-
-		return res.json({ success: true, favorites: enrichedFavorites });
-	} catch (err) {
-		console.error('GET /api/user/favorites error', err);
-		return res.status(500).json({ success: false, error: err.message });
-	}
-});
-
 // Obtener favoritos públicos del usuario (solo "Viendo")
 app.get('/api/user/:userId/favorites/public', async (req, res) => {
 	const { userId } = req.params;
@@ -661,6 +661,8 @@ app.get('/api/profile/:userId/favorites', async (req, res) => {
 	}
 });
 
+// Obtener todos los favoritos de un usuario (privado y público)
+// IMPORTANTE: Este debe ir DESPUÉS de los endpoints más específicos (/public, /profile, etc)
 app.get('/api/user/:userId/favorites', async (req, res) => {
 	const { userId } = req.params;
 
@@ -668,9 +670,47 @@ app.get('/api/user/:userId/favorites', async (req, res) => {
 		return res.status(400).json({ success: false, error: 'User ID is required' });
 	}
 
+	// Si el usuario está logueado y es su propio ID, devolver todos los favoritos
+	// Si no, devolver solo los públicos
+	const isOwnProfile = req.session.user && String(req.session.user.id_usuari) === String(userId);
+
 	try {
-		const favorites = await findPublicFavoritesByUser(userId);
-		return res.json({ success: true, favorites });
+		let favorites;
+		if (isOwnProfile) {
+			// Usar la función completa para devolver todos los favoritos con datos del anime
+			favorites = await findFavoritesByUser(userId);
+
+			// Enriquecer con datos del anime y valoración media
+			const enrichedFavorites = await Promise.all(
+				favorites.map(async (fav) => {
+					try {
+						const anime = await findAnimeById(fav.id_anime);
+						let ratingData = { average: 0, count: 0 };
+						try {
+							ratingData = await findRatingSummaryByAnimeId(fav.id_anime);
+						} catch (err) {
+							console.error(`Error loading rating for anime ${fav.id_anime}:`, err);
+						}
+						return {
+							...fav,
+							anime: anime ? { ...anime, rating: ratingData } : null
+						};
+					} catch (err) {
+						console.error(`Error loading anime ${fav.id_anime}:`, err);
+						return {
+							...fav,
+							anime: null
+						};
+					}
+				})
+			);
+
+			return res.json({ success: true, favorites: enrichedFavorites });
+		} else {
+			// Devolver solo favoritos públicos
+			favorites = await findPublicFavoritesByUser(userId);
+			return res.json({ success: true, favorites });
+		}
 	} catch (err) {
 		console.error('GET /api/user/:userId/favorites error', err);
 		return res.status(500).json({ success: false, error: err.message });
