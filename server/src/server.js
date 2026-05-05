@@ -803,7 +803,7 @@ app.post('/api/anime/sync/:id', async (req, res) => {
 	}
 });
 
-app.get('/api/user/update-username', async (req, res) => {
+app.get('/api/settings/update-username', async (req, res) => {
 	if (!req.session.user) {
 		return res.status(401).json({ success: false, error: 'No hay sesión activa' });
 	}
@@ -812,19 +812,68 @@ app.get('/api/user/update-username', async (req, res) => {
 		return res.status(400).json({ success: false, error: 'El nombre de usuario no puede estar vacío' });
 	}
 	try {
-		const { data, error } = await updateUsername(req.session.user.id_usuari, newUsername.trim());
+		const userId = req.session.user.id_usuari || req.session.user.id_usuario || req.session.user.id_user || req.session.user.id;
+		let currentUser = null;
+
+		if (req.session.user.email) {
+			const result = await findUserByEmail(req.session.user.email);
+			if (result.error) {
+				console.error('Error fetching user by session email:', result.error);
+				return res.status(500).json({ success: false, error: 'Error al comprobar el usuario de la sesion.' });
+			}
+			currentUser = result.data;
+		}
+
+		if (!currentUser && req.session.user.nom) {
+			const result = await findUserByNom(req.session.user.nom);
+			if (result.error) {
+				console.error('Error fetching user by session username:', result.error);
+				return res.status(500).json({ success: false, error: 'Error al comprobar el usuario de la sesion.' });
+			}
+			currentUser = result.data;
+		}
+
+		if (!currentUser && !userId) {
+			return res.status(401).json({ success: false, error: 'La sesion no contiene datos suficientes para identificar al usuario.' });
+		}
+
+		const updateUserId = currentUser?.id_usuari || userId;
+		if (!updateUserId) {
+			return res.status(404).json({ success: false, error: 'Usuario de sesion no encontrado.' });
+		}
+
+		const trimmedUsername = newUsername.trim();
+		const { data, error } = await updateUsername(updateUserId, trimmedUsername);
 		if (error) {
 			console.error('Error updating username:', error);
 			const errorMessage = error.message || 'Error al actualizar el nombre de usuario';
 			const statusCode = errorMessage.includes('registrado') ? 400 : 500;
 			return res.status(statusCode).json({ success: false, error: errorMessage });
 		}
-		if (!data) {
+		let updatedUsernameUser = data;
+		if (!updatedUsernameUser) {
+			const refreshed = await findUserByNom(trimmedUsername);
+			if (refreshed.error) {
+				console.error('Error fetching updated username:', refreshed.error);
+				return res.status(500).json({ success: false, error: 'Error al comprobar el usuario actualizado' });
+			}
+			updatedUsernameUser = refreshed.data;
+		}
+
+		if (!updatedUsernameUser) {
 			return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
 		}
 		// actualizar el nombre de usuario en la sesión para que el cambio se refleje inmediatamente
-		req.session.user.nom = newUsername.trim();
-		return res.json({ success: true, user: data });
+		req.session.user = {
+			...req.session.user,
+			id_usuari: updatedUsernameUser.id_usuari,
+			nom: updatedUsernameUser.nom,
+			email: updatedUsernameUser.email,
+			id_anime_preferit: updatedUsernameUser.id_anime_preferit,
+			id_anime_recomanat: updatedUsernameUser.id_anime_recomanat,
+			img_url: updatedUsernameUser.img_url
+		};
+		return res.json({ success: true, user: req.session.user });
 	} catch (error) {
 		console.error('Error updating username:', error);
 		return res.status(500).json({ success: false, error: 'Error al actualizar el nombre de usuario' });

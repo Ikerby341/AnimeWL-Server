@@ -79,7 +79,27 @@ export async function updateUserAnimeChoice(id_usuari, field, id_anime) {
 }
 
 export async function updateUsername(id_usuari, newUsername) {
-    let result = await supabase.from('usuari').select('nom').eq('nom', newUsername).maybeSingle();
+    const currentUser = await supabase
+        .from('usuari')
+        .select('id_usuari')
+        .eq('id_usuari', id_usuari)
+        .maybeSingle();
+
+    if (currentUser.error) {
+        console.error('Error checking current user:', currentUser.error);
+        return { data: null, error: currentUser.error };
+    }
+    if (!currentUser.data) {
+        return { data: null, error: new Error('Usuario actual no encontrado.') };
+    }
+
+    let result = await supabase
+        .from('usuari')
+        .select('id_usuari, nom')
+        .eq('nom', newUsername)
+        .neq('id_usuari', id_usuari)
+        .maybeSingle();
+
     if (result.error) {
         console.error('Error checking username uniqueness:', result.error);
         return { data: null, error: result.error };
