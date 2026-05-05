@@ -298,12 +298,22 @@ export async function upsertChapters(id_anime, episodeNumbers = [], options = { 
 }
 
 // retornar la lista completa de animes (sin paginar), incluyendo recuento de capítulos
-export async function listAnimes(genre = null, limit = null) {
+export async function listAnimes(genre = null, limit = null, offset = 0) {
+    const numericLimit = Number(limit);
+    const numericOffset = Number(offset);
+    const hasPagination = Number.isFinite(numericLimit) && numericLimit > 0;
+
     let query = supabase
         .from('anime')
         .select(genre ? '*, anime_genere!inner(id_genere)' : '*')
-        .order('lastupdate', { ascending: false })
-        .limit(limit || null);
+        .order('lastupdate', { ascending: false });
+
+    if (hasPagination) {
+        const from = Number.isFinite(numericOffset) && numericOffset > 0 ? numericOffset : 0;
+        query = query.range(from, from + numericLimit - 1);
+    } else if (limit) {
+        query = query.limit(limit);
+    }
 
     if (genre) {
         query = query.eq('anime_genere.id_genere', genre);

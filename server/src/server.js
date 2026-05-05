@@ -185,8 +185,19 @@ async function translateText(text, source = 'en', target = 'es') {
 // endpoint que devuelve todos los animes almacenados
 app.get('/api/anime', async (req, res) => {
 	try {
-		const anime = await listAnimes();
-		res.json({ success: true, anime });
+		const limit = Number(req.query.limit);
+		const offset = Number(req.query.offset || 0);
+		const hasPagination = Number.isFinite(limit) && limit > 0;
+		const fetchLimit = hasPagination ? limit + 1 : null;
+		const anime = await listAnimes(null, fetchLimit, offset);
+		const hasMore = hasPagination && anime.length > limit;
+
+		res.json({
+			success: true,
+			anime: hasPagination ? anime.slice(0, limit) : anime,
+			hasMore,
+			nextOffset: hasMore ? offset + limit : null
+		});
 	} catch (err) {
 		console.error('GET /api/anime error', err);
 		res.status(500).json({ success: false, error: err.message });
