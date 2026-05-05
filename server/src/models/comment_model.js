@@ -49,3 +49,20 @@ export async function insertComment(comment) {
         userImg: data.usuari?.img_url || null,
     };
 }
+
+export async function deleteCommentById(id_comentari, id_usuari) {
+    const { data, error } = await supabase
+        .from('comentari')
+        .delete()
+        .eq('id_comentari', id_comentari)
+        .eq('id_usuari', id_usuari)
+        .select('id_comentari')
+        .maybeSingle();
+
+    if (error) {
+        console.error('deleteCommentById error', error);
+        throw error;
+    }
+
+    return data;
+}

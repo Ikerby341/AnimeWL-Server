@@ -10,7 +10,7 @@ import nodemailer from 'nodemailer';
 import supabase from './config/db.js';
 import { syncAnimeById, syncAnimeMetadataById, mapJikanToDb } from './controllers/syncAnime.js';
 import { findAnimeById, listAnimes, testDbConnection, getEpisodeCountByAnime } from './models/anime_model.js';
-import { findCommentsByAnimeId, insertComment } from './models/comment_model.js';
+import { findCommentsByAnimeId, insertComment, deleteCommentById } from './models/comment_model.js';
 import { registerUser, findUserByNom, findUserByEmail, updateUserProfilePicture, updateUserAnimeChoice, updateUsername, updateUserPassword, updateUserEmail, updateResetPasswordToken, findUserByResetToken, clearResetPasswordToken, findPublicUserById } from './models/users_model.js';
 import { findRatingSummaryByAnimeId, findRatingByAnimeAndUser, saveRating } from './models/rating_model.js';
 import { findProgressByAnimeAndUser, saveProgress, getUserStats } from './models/progress_model.js';
@@ -407,6 +407,26 @@ app.get('/api/anime/:id/comments', async (req, res) => {
 	}
 });
 
+async function deleteCommentHandler(req, res) {
+	const { commentId } = req.params;
+	if (!req.session.user) {
+		return res.status(401).json({ success: false, error: 'No hay sesión activa' });
+	}
+	try {
+		const deleted = await deleteCommentById(commentId, req.session.user.id_usuari);
+		if (!deleted) {
+			return res.status(404).json({ success: false, error: 'Comentario no encontrado' });
+		}
+		return res.json({ success: true, id_comentari: deleted.id_comentari });
+	} catch (err) {
+		console.error('DELETE comment error', err);
+		return res.status(500).json({ success: false, error: err.message });
+	}
+}
+
+app.delete('/api/anime/:id/comments/:commentId', deleteCommentHandler);
+app.delete('/api/comments/:commentId', deleteCommentHandler);
+
 app.get('/api/anime/:id/rating', async (req, res) => {
 	const { id } = req.params;
 	try {
@@ -792,6 +812,23 @@ app.post('/api/anime/:id/comments', async (req, res) => {
 });
 
 // ruta para forzar la sincronización manualmente
+app.delete('/api/comments/:commentId', async (req, res) => {
+	const { commentId } = req.params;
+	if (!req.session.user) {
+		return res.status(401).json({ success: false, error: 'No hay sesión activa' });
+	}
+	try {
+		const deleted = await deleteCommentById(commentId, req.session.user.id_usuari);
+		if (!deleted) {
+			return res.status(404).json({ success: false, error: 'Comentario no encontrado' });
+		}
+		return res.json({ success: true, id_comentari: deleted.id_comentari });
+	} catch (err) {
+		console.error('DELETE /api/comments/:commentId error', err);
+		return res.status(500).json({ success: false, error: err.message });
+	}
+});
+
 app.post('/api/anime/sync/:id', async (req, res) => {
 	const { id } = req.params;
 	try {
