@@ -1133,7 +1133,18 @@ app.post('/api/user/anime', async (req, res) => {
 		if (!data) {
 			return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
 		}
-		return res.json({ success: true, user: data });
+
+		req.session.user = {
+			...req.session.user,
+			id_usuari: data.id_usuari,
+			nom: data.nom,
+			email: data.email,
+			id_anime_preferit: data.id_anime_preferit,
+			id_anime_recomanat: data.id_anime_recomanat,
+			img_url: data.img_url
+		};
+
+		return res.json({ success: true, user: req.session.user });
 	} catch (error) {
 		console.error('POST /api/user/anime error', error);
 		return res.status(500).json({ success: false, error: error.message });
