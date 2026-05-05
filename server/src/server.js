@@ -9,7 +9,7 @@ import cookieSession from 'cookie-session';
 import nodemailer from 'nodemailer';
 import supabase from './config/db.js';
 import { syncAnimeById, syncAnimeMetadataById, mapJikanToDb } from './controllers/syncAnime.js';
-import { findAnimeById, listAnimes, testDbConnection } from './models/anime_model.js';
+import { findAnimeById, listAnimes, testDbConnection, getEpisodeCountByAnime } from './models/anime_model.js';
 import { findCommentsByAnimeId, insertComment } from './models/comment_model.js';
 import { registerUser, findUserByNom, findUserByEmail, updateUserProfilePicture, updateUserAnimeChoice, updateUsername, updateUserPassword, updateUserEmail, updateResetPasswordToken, findUserByResetToken, clearResetPasswordToken, findPublicUserById } from './models/users_model.js';
 import { findRatingSummaryByAnimeId, findRatingByAnimeAndUser, saveRating } from './models/rating_model.js';
@@ -419,11 +419,7 @@ app.get('/api/anime/:id/progress', async (req, res) => {
 		if (req.session.user) {
 			progress = await findProgressByAnimeAndUser(id, req.session.user.id_usuari);
 		}
-		const { count, error: capErr } = await supabase
-			.from('capitol')
-			.select('id_capitol', { count: 'exact', head: true })
-			.eq('id_anime', id);
-		const episodeCount = capErr ? 0 : Number(count || 0);
+		const episodeCount = await getEpisodeCountByAnime(id);
 		return res.json({ success: true, progress, episodeCount });
 	} catch (err) {
 		console.error('GET /api/anime/:id/progress error', err);

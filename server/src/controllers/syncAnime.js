@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { upsertAnime, upsertAnimeGenres, upsertChapters, touchAnimeLastUpdate } from '../models/anime_model.js';
+import { upsertAnime, upsertAnimeGenres, upsertChapters, touchAnimeLastUpdate, hasUsableEpisodeDetail } from '../models/anime_model.js';
 import supabase from '../config/db.js';
 
 async function fetchAnimePage(page = 1) {
@@ -120,7 +120,7 @@ async function fetchExistingNextEpisodeNumbers(animeId, maxStoredEpisode, maxEpi
             }
 
             const json = await fetchJikanJson(`https://api.jikan.moe/v4/anime/${animeId}/episodes/${episodeNumber}`);
-            if (json?.data) {
+            if (hasUsableEpisodeDetail(json?.data)) {
                 numbers.push(episodeNumber);
                 continue;
             }

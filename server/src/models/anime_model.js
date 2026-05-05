@@ -24,15 +24,7 @@ export async function findAnimeById(id_anime) {
         delete data.anime_genere;
     }
 
-    const { data: capRows, error: capErr } = await supabase
-        .from('capitol')
-        .select('id_capitol')
-        .eq('id_anime', id_anime);
-    if (!capErr) {
-        data.episodeCount = (capRows || []).length;
-    } else {
-        data.episodeCount = 0;
-    }
+    data.episodeCount = await getEpisodeCountByAnime(id_anime);
 
     return data;
 }
@@ -41,24 +33,19 @@ export async function getEpisodeCountByAnime(id_anime) {
     if (!id_anime) return 0;
 
     try {
-        const { count, error } = await supabase
+        const { data, error } = await supabase
             .from('capitol')
-            .select('id_capitol', { count: 'exact', head: true })
-            .eq('id_anime', id_anime);
+            .select('numero')
+            .eq('id_anime', id_anime)
+            .order('numero', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (!error && typeof count === 'number') {
-            return count;
+        if (!error && data) {
+            return Number(data.numero || 0);
         }
     } catch (err) {
         console.error('episode count query error', err);
-    }
-
-    const { data, error } = await supabase
-        .from('capitol')
-        .select('id_capitol')
-        .eq('id_anime', id_anime);
-    if (!error && data) {
-        return data.length;
     }
 
     return 0;
@@ -182,6 +169,19 @@ function parseDuration(val) {
 
 
 // obtener información detallada de un solo episodio
+export function hasUsableEpisodeDetail(episode) {
+    if (!episode) return false;
+
+    return Boolean(
+        episode.aired ||
+        episode.duration ||
+        episode.synopsis ||
+        episode.title?.trim() ||
+        episode.title_japanese?.trim() ||
+        episode.title_romanji?.trim()
+    );
+}
+
 async function fetchEpisodeDetail(animeId, epId) {
     const url = `https://api.jikan.moe/v4/anime/${animeId}/episodes/${epId}`;
     let attempts = 0;
@@ -224,17 +224,24 @@ export async function upsertChapters(id_anime, episodeNumbers = [], options = { 
         for (const num of episodeNumbers) {
             let title = '';
             let duration = null;
+            let hasEpisodeData = false;
 
             // llamar directamente al endpoint individual para obtener título y duración
             try {
                 await new Promise((r) => setTimeout(r, 2000));
                 const det = await fetchEpisodeDetail(id_anime, num);
-                if (det) {
+                hasEpisodeData = hasUsableEpisodeDetail(det);
+                if (hasEpisodeData) {
                     title = det.title || '';
                     duration = parseDuration(det.duration);
                 }
             } catch (err) {
                 console.error(`episode detail fetch error (ep ${num})`, err.message);
+            }
+
+            if (!hasEpisodeData) {
+                console.warn(`upsertChapters: skipping placeholder episode ${num} for anime ${id_anime}`);
+                break;
             }
 
             const id_capitol = `${id_anime}-${num}`;
@@ -279,44 +286,13 @@ export async function listAnimes(genre = null, limit = null) {
 
     const animes = animeData || [];
 
-    if (animes.length > 0) {
-        const ids = animes.map((a) => a.id_anime);
-        console.log('listAnimes: fetching episode counts for', ids.length, 'animes, ids:', ids.slice(0, 5));
-
-        // Obtener el máximo episodio para cada anime
-        // Dividir en chunks de 100 por el límite de Supabase
-        const maxByAnime = {};
-        const chunkSize = 100;
-
-        for (let i = 0; i < ids.length; i += chunkSize) {
-            const chunk = ids.slice(i, i + chunkSize);
-            console.log('  fetching chunk', i / chunkSize + 1, 'with ids:', chunk);
-
-            const { data: maxEpisodes, error: maxErr } = await supabase
-                .from('capitol')
-                .select('id_anime, numero')
-                .in('id_anime', chunk);
-
-            if (maxErr) {
-                console.error('  episode max query error:', maxErr);
-            } else {
-                console.log('  maxEpisodes raw:', maxEpisodes);
-                maxEpisodes.forEach((r) => {
-                    const key = String(r.id_anime);
-                    if (!maxByAnime[key] || r.numero > maxByAnime[key]) {
-                        maxByAnime[key] = r.numero;
-                    }
-                });
-            }
-        }
-
-        console.log('  maxByAnime:', maxByAnime);
-
-        animes.forEach((a) => {
-            a.episodeCount = maxByAnime[String(a.id_anime)] || 0;
-        });
-        console.log('  final episodeCounts:', animes.map(a => ({ id: a.id_anime, count: a.episodeCount })));
+    for (let i = 0; i < animes.length; i += 8) {
+        const chunk = animes.slice(i, i + 8);
+        await Promise.all(
+            chunk.map(async (anime) => {
+                anime.episodeCount = await getEpisodeCountByAnime(anime.id_anime);
+            })
+        );
     }
-
     return animes;
 }
