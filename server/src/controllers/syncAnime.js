@@ -2,11 +2,23 @@ import axios from 'axios';
 import { upsertAnime, upsertAnimeGenres, upsertChapters, touchAnimeLastUpdate, hasUsableEpisodeDetail } from '../models/anime_model.js';
 import supabase from '../config/db.js';
 
+let lastJikanRequestAt = 0;
+
+async function waitForJikanRateLimit() {
+    const minIntervalMs = 1100;
+    const elapsed = Date.now() - lastJikanRequestAt;
+    if (elapsed < minIntervalMs) {
+        await new Promise((r) => setTimeout(r, minIntervalMs - elapsed));
+    }
+    lastJikanRequestAt = Date.now();
+}
+
 async function fetchAnimePage(page = 1) {
     const url = `https://api.jikan.moe/v4/anime?page=${page}`;
     let attempts = 0;
     while (true) {
         try {
+            await waitForJikanRateLimit();
             const res = await axios.get(url);
             return res.data;
         } catch (err) {
@@ -39,6 +51,7 @@ async function fetchJikanJson(url) {
     let attempts = 0;
     while (true) {
         try {
+            await waitForJikanRateLimit();
             const res = await axios.get(url);
             return res.data;
         } catch (err) {
@@ -74,6 +87,46 @@ async function getMaxStoredEpisode(id_anime) {
         console.error('getMaxStoredEpisode error', err.message);
     }
     return 0;
+}
+
+async function getFirstMissingEpisode(id_anime, episodeCount) {
+    if (!id_anime || !Number.isFinite(episodeCount) || episodeCount <= 0) {
+        return null;
+    }
+
+    const storedNumbers = new Set();
+    const pageSize = 1000;
+
+    for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+            .from('capitol')
+            .select('numero')
+            .eq('id_anime', id_anime)
+            .order('numero', { ascending: true })
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            console.error('getFirstMissingEpisode error', error);
+            return null;
+        }
+
+        for (const row of data || []) {
+            const numero = Number(row.numero);
+            if (Number.isFinite(numero)) {
+                storedNumbers.add(numero);
+            }
+        }
+
+        if (!data || data.length < pageSize) break;
+    }
+
+    for (let episode = 1; episode <= episodeCount; episode++) {
+        if (!storedNumbers.has(episode)) {
+            return episode;
+        }
+    }
+
+    return null;
 }
 
 function getEpisodeListTotal(json) {
@@ -222,6 +275,18 @@ export async function syncAnimeById(idAnime) {
     let apiEpisodeCount = Number.isFinite(Number(data.episodes)) ? Number(data.episodes) : null;
     let firstEpisodeListJson = null;
     let shouldProbeNextEpisodes = false;
+    const episodeDetailsByNumber = {};
+    const skipEpisodeDetailForNumbers = [];
+
+    if (data.type === 'Movie' && apiEpisodeCount === 1) {
+        episodeDetailsByNumber[1] = {
+            title: data.title,
+            duration: data.duration,
+            aired: data.aired?.from,
+            synopsis: data.synopsis
+        };
+        skipEpisodeDetailForNumbers.push(1);
+    }
 
     console.log(`syncAnimeById [${idAnime}]: API reports ${apiEpisodeCount} episodes`);
 
@@ -246,23 +311,31 @@ export async function syncAnimeById(idAnime) {
             }
         }
 
+        const firstMissingEpisode = await getFirstMissingEpisode(record.id_anime, apiEpisodeCount);
         const needsSync =
             shouldProbeNextEpisodes ||
+            firstMissingEpisode !== null ||
             (apiEpisodeCount !== null && apiEpisodeCount > maxStoredEpisode) ||
             (apiEpisodeCount === null && maxStoredEpisode === 0);
 
         console.log(`syncAnimeById [${idAnime}]: needsSync = ${needsSync}`);
 
         if (needsSync) {
+            let syncFromEpisode = maxStoredEpisode;
+            if (firstMissingEpisode !== null && firstMissingEpisode <= maxStoredEpisode) {
+                syncFromEpisode = firstMissingEpisode - 1;
+                console.log(`syncAnimeById [${idAnime}]: filling gap from episode ${firstMissingEpisode}`);
+            }
+
             // solo pedimos los números que nos faltan, empezando desde la página correcta;
             // upsertChapters llama al endpoint individual /episodes/{num} para cada uno
-            const newNumbers = await fetchNewEpisodeNumbers(record.id_anime, maxStoredEpisode, firstEpisodeListJson);
+            const newNumbers = await fetchNewEpisodeNumbers(record.id_anime, syncFromEpisode, firstEpisodeListJson);
             let numbersToSync = newNumbers.length
                 ? newNumbers
-                : getMissingEpisodeNumbersFromCount(apiEpisodeCount, maxStoredEpisode);
+                : getMissingEpisodeNumbersFromCount(apiEpisodeCount, syncFromEpisode);
 
             if (!newNumbers.length && !numbersToSync.length && shouldProbeNextEpisodes) {
-                numbersToSync = await fetchExistingNextEpisodeNumbers(record.id_anime, maxStoredEpisode);
+                numbersToSync = await fetchExistingNextEpisodeNumbers(record.id_anime, syncFromEpisode);
             }
 
             if (!newNumbers.length && numbersToSync.length) {
@@ -275,7 +348,11 @@ export async function syncAnimeById(idAnime) {
 
             console.log(`syncAnimeById [${idAnime}]: new episode numbers =`, numbersToSync);
             if (numbersToSync.length) {
-                await upsertChapters(record.id_anime, numbersToSync, { replaceExisting: false });
+                await upsertChapters(record.id_anime, numbersToSync, {
+                    replaceExisting: false,
+                    episodeDetailsByNumber,
+                    skipEpisodeDetailForNumbers
+                });
                 await touchAnimeLastUpdate(record.id_anime);
                 console.log(`syncAnimeById [${idAnime}]: chapters saved successfully`);
             }

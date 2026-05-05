@@ -2,6 +2,16 @@ import supabase from '../config/db.js';
 import axios from 'axios';
 
 const KEYS_TO_COMPARE = ['titol', 'sinopsi', 'estat', 'imatge_portada', 'dataAfegit'];
+let lastJikanRequestAt = 0;
+
+async function waitForJikanRateLimit() {
+    const minIntervalMs = 1100;
+    const elapsed = Date.now() - lastJikanRequestAt;
+    if (elapsed < minIntervalMs) {
+        await new Promise((r) => setTimeout(r, minIntervalMs - elapsed));
+    }
+    lastJikanRequestAt = Date.now();
+}
 
 export async function findAnimeById(id_anime) {
     // aprovechamos la capacidad de PostgREST para hacer un join y
@@ -163,8 +173,14 @@ function parseDuration(val) {
         // el endpoint de detalle devuelve segundos; convertir a minutos
         return Math.round(val / 60);
     }
-    const m = val.toString().match(/(\d+)\s*min/);
-    return m ? parseInt(m[1], 10) : null;
+    const text = val.toString().toLowerCase();
+    const hours = text.match(/(\d+)\s*(?:hr|hrs|hour|hours|h)/);
+    const minutes = text.match(/(\d+)\s*(?:min|mins|minute|minutes|m)/);
+    const totalMinutes =
+        (hours ? parseInt(hours[1], 10) * 60 : 0) +
+        (minutes ? parseInt(minutes[1], 10) : 0);
+
+    return totalMinutes > 0 ? totalMinutes : null;
 }
 
 
@@ -187,13 +203,19 @@ async function fetchEpisodeDetail(animeId, epId) {
     let attempts = 0;
     while (true) {
         try {
+            await waitForJikanRateLimit();
             const res = await axios.get(url);
             return res.data.data;
         } catch (err) {
-            if (err.response && err.response.status === 429) {
+            const status = err.response?.status;
+            if (status === 429 || status >= 500 || !err.response) {
                 attempts++;
-                const delay = Math.min(1000 * 2 ** attempts, 30000);
-                console.warn(`rate limit hit on episode detail, waiting ${delay}ms`);
+                if (attempts > 5) {
+                    throw err;
+                }
+
+                const delay = Math.min(1500 * 2 ** attempts, 30000);
+                console.warn(`episode detail fetch retry ${attempts} for anime ${animeId} episode ${epId}, waiting ${delay}ms`);
                 await new Promise((r) => setTimeout(r, delay));
                 continue;
             }
@@ -224,25 +246,35 @@ export async function upsertChapters(id_anime, episodeNumbers = [], options = { 
         for (const num of episodeNumbers) {
             let title = '';
             let duration = null;
-            let hasEpisodeData = false;
+            const fallbackDetail = options.episodeDetailsByNumber?.[num];
+            let episodeDetail = fallbackDetail;
+            const shouldFetchEpisodeDetail = !options.skipEpisodeDetailForNumbers?.includes(num);
+            let fetchFailed = false;
 
             // llamar directamente al endpoint individual para obtener título y duración
-            try {
-                await new Promise((r) => setTimeout(r, 2000));
-                const det = await fetchEpisodeDetail(id_anime, num);
-                hasEpisodeData = hasUsableEpisodeDetail(det);
-                if (hasEpisodeData) {
-                    title = det.title || '';
-                    duration = parseDuration(det.duration);
+            if (shouldFetchEpisodeDetail) {
+                try {
+                    const det = await fetchEpisodeDetail(id_anime, num);
+                    if (hasUsableEpisodeDetail(det)) {
+                        episodeDetail = det;
+                    }
+                } catch (err) {
+                    fetchFailed = true;
+                    console.error(`episode detail fetch error (ep ${num})`, err.message);
                 }
-            } catch (err) {
-                console.error(`episode detail fetch error (ep ${num})`, err.message);
             }
 
-            if (!hasEpisodeData) {
+            if (!hasUsableEpisodeDetail(episodeDetail)) {
+                if (fetchFailed && !fallbackDetail) {
+                    console.warn(`upsertChapters: stopping at episode ${num} for anime ${id_anime} after detail fetch error`);
+                    break;
+                }
                 console.warn(`upsertChapters: skipping placeholder episode ${num} for anime ${id_anime}`);
                 break;
             }
+
+            title = episodeDetail.title || '';
+            duration = parseDuration(episodeDetail.duration);
 
             const id_capitol = `${id_anime}-${num}`;
             const rec = {
