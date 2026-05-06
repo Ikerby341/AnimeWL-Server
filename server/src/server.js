@@ -75,7 +75,6 @@ async function sendVerificationEmail(to, code) {
 async function sendPasswordResetEmail(to, resetToken) {
 	const transporter = getMailTransporter();
 	const from = process.env.EMAIL_FROM || process.env.EMAIL_SMTP_USER;
-	const frontendUrl = process.env.FRONTEND_URL || (isProduction ? 'https://animewl.cat' : 'http://localhost:5173');
 	const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
 
 	const mailOptions = {
@@ -98,6 +97,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const isProduction = process.env.NODE_ENV === 'production';
+const defaultFrontendUrl = isProduction ? 'https://animewl.cat' : 'http://localhost:5173';
+const frontendUrl = process.env.FRONTEND_URL || defaultFrontendUrl;
+const allowedOrigins = [
+	frontendUrl,
+	'https://animewl.cat',
+	'https://www.animewl.cat',
+	'http://localhost:5173'
+];
+const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+const cookieSameSite = process.env.COOKIE_SAMESITE || (isProduction ? 'none' : 'lax');
 
 // Middleware JSON
 app.use(express.json());
@@ -105,10 +114,7 @@ app.use(express.json());
 app.set('trust proxy', 1);
 
 app.use(cors({
-	origin: [
-		'https://animewl.cat',
-		'http://localhost:5173'
-	],
+	origin: allowedOrigins,
 	credentials: true
 }));
 
@@ -116,10 +122,10 @@ app.use(cookieSession({
 	name: 'session',
 	keys: [process.env.SESSION_SECRET],
 	maxAge: 30 * 24 * 60 * 60 * 1000,
-
+	domain: cookieDomain,
 	secure: isProduction,
 	httpOnly: true,
-	sameSite: isProduction ? 'none' : 'lax'
+	sameSite: cookieSameSite
 }));
 
 // programar / inicializar la sincronización diaria de datos de anime
