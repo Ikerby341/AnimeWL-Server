@@ -56,6 +56,9 @@ function verifyAuthToken(token) {
 	const expectedSignature = signTokenPayload(payload);
 	if (signature !== expectedSignature) return null;
 
+	if (trimmedContent.length > COMMENT_MAX_LENGTH) {
+		return res.status(400).json({ success: false, error: `El comentario no puede superar los ${COMMENT_MAX_LENGTH} caracteres.` });
+	}
 	try {
 		const data = JSON.parse(base64UrlDecode(payload));
 		if (!data.exp || Date.now() > data.exp || !data.user) return null;
@@ -134,6 +137,7 @@ const __dirname = path.dirname(__filename);			// Ruta de la carpeta on es troba 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const COMMENT_MAX_LENGTH = 255;
 
 const isProduction = process.env.NODE_ENV === 'production';
 const frontendUrl = process.env.FRONTEND_URL || (isProduction ? 'https://animewl.cat' : 'http://localhost:5173');
@@ -850,10 +854,11 @@ app.post('/api/anime/:id/rating', async (req, res) => {
 app.post('/api/anime/:id/comments', async (req, res) => {
 	const { id } = req.params;
 	const { contingut, id_capitol } = req.body;
+	const trimmedContent = typeof contingut === 'string' ? contingut.trim() : '';
 	if (!req.session.user) {
 		return res.status(401).json({ success: false, error: 'No hay sesión activa' });
 	}
-	if (!contingut || typeof contingut !== 'string' || contingut.trim() === '') {
+	if (!trimmedContent) {
 		return res.status(400).json({ success: false, error: 'El comentario no puede estar vacío' });
 	}
 	try {
@@ -862,7 +867,7 @@ app.post('/api/anime/:id/comments', async (req, res) => {
 			id_usuari: req.session.user.id_usuari,
 			id_anime: id,
 			id_capitol: id_capitol || null,
-			contingut: contingut.trim(),
+			contingut: trimmedContent,
 			data_hora: new Date().toISOString()
 		};
 		const inserted = await insertComment(newComment);
