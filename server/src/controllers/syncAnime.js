@@ -206,7 +206,7 @@ async function fetchEpisodeListInfo(animeId) {
 // consulta el endpoint de lista paginado (datos ligeros) solo para obtener
 // los números de episodio que aún no tenemos, saltando a la página correcta
 // para evitar peticiones innecesarias a Jikan
-async function fetchNewEpisodeNumbers(animeId, maxStoredEpisode = 0, firstJson = null) {
+async function fetchNewEpisodeNumbers(animeId, maxStoredEpisode = 0, firstJson = null, episodeDetailsByNumber = null) {
     const numbers = [];
 
     // primera petición para conocer per_page y calcular la página de inicio
@@ -232,6 +232,9 @@ async function fetchNewEpisodeNumbers(animeId, maxStoredEpisode = 0, firstJson =
             const num = ep.episode ?? ep.mal_id ?? null;
             if (num != null && num > maxStoredEpisode) {
                 numbers.push(num);
+                if (episodeDetailsByNumber && hasUsableEpisodeDetail(ep)) {
+                    episodeDetailsByNumber[num] = ep;
+                }
             }
         }
         if (!json.pagination?.has_next_page) break;
@@ -329,7 +332,7 @@ export async function syncAnimeById(idAnime) {
 
             // solo pedimos los números que nos faltan, empezando desde la página correcta;
             // upsertChapters llama al endpoint individual /episodes/{num} para cada uno
-            const newNumbers = await fetchNewEpisodeNumbers(record.id_anime, syncFromEpisode, firstEpisodeListJson);
+            const newNumbers = await fetchNewEpisodeNumbers(record.id_anime, syncFromEpisode, firstEpisodeListJson, episodeDetailsByNumber);
             let numbersToSync = newNumbers.length
                 ? newNumbers
                 : getMissingEpisodeNumbersFromCount(apiEpisodeCount, syncFromEpisode);
@@ -398,9 +401,10 @@ export async function syncAllAnime() {
 
                         try {
                             const maxStored = await getMaxStoredEpisode(record.id_anime);
-                            const newNumbers = await fetchNewEpisodeNumbers(record.id_anime, maxStored);
+                            const episodeDetailsByNumber = {};
+                            const newNumbers = await fetchNewEpisodeNumbers(record.id_anime, maxStored, null, episodeDetailsByNumber);
                             if (newNumbers.length) {
-                                await upsertChapters(record.id_anime, newNumbers, { replaceExisting: false });
+                                await upsertChapters(record.id_anime, newNumbers, { replaceExisting: false, episodeDetailsByNumber });
                             }
                         } catch (err) {
                             console.error('episode fetch error', err.message);

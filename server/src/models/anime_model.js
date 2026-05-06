@@ -13,6 +13,10 @@ async function waitForJikanRateLimit() {
     lastJikanRequestAt = Date.now();
 }
 
+function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function findAnimeById(id_anime) {
     // aprovechamos la capacidad de PostgREST para hacer un join y
     // traer también los géneros asociados; esto simplifica la respuesta
@@ -216,12 +220,32 @@ async function fetchEpisodeDetail(animeId, epId) {
 
                 const delay = Math.min(1500 * 2 ** attempts, 30000);
                 console.warn(`episode detail fetch retry ${attempts} for anime ${animeId} episode ${epId}, waiting ${delay}ms`);
-                await new Promise((r) => setTimeout(r, delay));
+                await wait(delay);
                 continue;
             }
             throw err;
         }
     }
+}
+
+async function fetchUsableEpisodeDetail(animeId, epId, maxAttempts = 6) {
+    let lastDetail = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        lastDetail = await fetchEpisodeDetail(animeId, epId);
+
+        if (hasUsableEpisodeDetail(lastDetail)) {
+            return lastDetail;
+        }
+
+        if (attempt < maxAttempts) {
+            const delay = Math.min(3000 * 2 ** (attempt - 1), 30000);
+            console.warn(`episode detail placeholder retry ${attempt} for anime ${animeId} episode ${epId}, waiting ${delay}ms`);
+            await wait(delay);
+        }
+    }
+
+    return lastDetail;
 }
 
 export async function upsertChapters(id_anime, episodeNumbers = [], options = { replaceExisting: false }) {
@@ -254,7 +278,7 @@ export async function upsertChapters(id_anime, episodeNumbers = [], options = { 
             // llamar directamente al endpoint individual para obtener título y duración
             if (shouldFetchEpisodeDetail) {
                 try {
-                    const det = await fetchEpisodeDetail(id_anime, num);
+                    const det = await fetchUsableEpisodeDetail(id_anime, num, fallbackDetail ? 3 : 6);
                     if (hasUsableEpisodeDetail(det)) {
                         episodeDetail = det;
                     }
