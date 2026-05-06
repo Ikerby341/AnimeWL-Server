@@ -323,7 +323,7 @@ async function fetchAnimeFromDb(query) {
 }
 
 async function fetchJikanSearch(query) {
-	const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=10&sfw=true`;
+	const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=10&sfw=true&rating=r17`;
 	let attempts = 0;
 	while (true) {
 		try {
