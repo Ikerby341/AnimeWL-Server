@@ -56,9 +56,6 @@ function verifyAuthToken(token) {
 	const expectedSignature = signTokenPayload(payload);
 	if (signature !== expectedSignature) return null;
 
-	if (trimmedContent.length > COMMENT_MAX_LENGTH) {
-		return res.status(400).json({ success: false, error: `El comentario no puede superar los ${COMMENT_MAX_LENGTH} caracteres.` });
-	}
 	try {
 		const data = JSON.parse(base64UrlDecode(payload));
 		if (!data.exp || Date.now() > data.exp || !data.user) return null;
@@ -860,6 +857,9 @@ app.post('/api/anime/:id/comments', async (req, res) => {
 	}
 	if (!trimmedContent) {
 		return res.status(400).json({ success: false, error: 'El comentario no puede estar vacío' });
+	}
+	if (trimmedContent.length > COMMENT_MAX_LENGTH) {
+		return res.status(400).json({ success: false, error: `El comentario no puede superar los ${COMMENT_MAX_LENGTH} caracteres.` });
 	}
 	try {
 		const newComment = {
