@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
-import { randomUUID, randomBytes, scryptSync } from 'crypto';
+import { randomUUID, randomBytes, scryptSync, createHmac } from 'crypto';
 import session from 'express-session';
 import cookieSession from 'cookie-session';
 import nodemailer from 'nodemailer';
@@ -24,6 +24,45 @@ function hashPassword(password) {
 
 function validateEmail(email) {
 	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function base64UrlEncode(value) {
+	return Buffer.from(value).toString('base64url');
+}
+
+function base64UrlDecode(value) {
+	return Buffer.from(value, 'base64url').toString('utf8');
+}
+
+function signTokenPayload(payload) {
+	return createHmac('sha256', process.env.SESSION_SECRET).update(payload).digest('base64url');
+}
+
+function createAuthToken(user) {
+	if (!process.env.SESSION_SECRET) return null;
+
+	const payload = base64UrlEncode(JSON.stringify({
+		user,
+		exp: Date.now() + 30 * 24 * 60 * 60 * 1000
+	}));
+	const signature = signTokenPayload(payload);
+	return `${payload}.${signature}`;
+}
+
+function verifyAuthToken(token) {
+	if (!process.env.SESSION_SECRET || !token || !token.includes('.')) return null;
+
+	const [payload, signature] = token.split('.');
+	const expectedSignature = signTokenPayload(payload);
+	if (signature !== expectedSignature) return null;
+
+	try {
+		const data = JSON.parse(base64UrlDecode(payload));
+		if (!data.exp || Date.now() > data.exp || !data.user) return null;
+		return data.user;
+	} catch {
+		return null;
+	}
 }
 
 function getMailTransporter() {
@@ -97,16 +136,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const isProduction = process.env.NODE_ENV === 'production';
-const defaultFrontendUrl = isProduction ? 'https://animewl.cat' : 'http://localhost:5173';
-const frontendUrl = process.env.FRONTEND_URL || defaultFrontendUrl;
-const allowedOrigins = [
-	frontendUrl,
-	'https://animewl.cat',
-	'https://www.animewl.cat',
-	'http://localhost:5173'
-];
-const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
-const cookieSameSite = process.env.COOKIE_SAMESITE || (isProduction ? 'none' : 'lax');
+const frontendUrl = process.env.FRONTEND_URL || (isProduction ? 'https://animewl.cat' : 'http://localhost:5173');
 
 // Middleware JSON
 app.use(express.json());
@@ -114,7 +144,10 @@ app.use(express.json());
 app.set('trust proxy', 1);
 
 app.use(cors({
-	origin: allowedOrigins,
+	origin: [
+		'https://animewl.cat',
+		'http://localhost:5173'
+	],
 	credentials: true
 }));
 
@@ -122,11 +155,35 @@ app.use(cookieSession({
 	name: 'session',
 	keys: [process.env.SESSION_SECRET],
 	maxAge: 30 * 24 * 60 * 60 * 1000,
-	domain: cookieDomain,
+
 	secure: isProduction,
 	httpOnly: true,
-	sameSite: cookieSameSite
+	sameSite: isProduction ? 'none' : 'lax'
 }));
+
+app.use((req, res, next) => {
+	const authHeader = req.headers.authorization || '';
+	const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+	const tokenUser = verifyAuthToken(token);
+
+	if (tokenUser && !req.session.user) {
+		req.session.user = tokenUser;
+	}
+
+	const originalJson = res.json.bind(res);
+	res.json = (body) => {
+		if (body && typeof body === 'object' && req.session?.user && !body.token) {
+			const refreshedToken = createAuthToken(req.session.user);
+			if (refreshedToken) {
+				body.token = refreshedToken;
+			}
+		}
+
+		return originalJson(body);
+	};
+
+	next();
+});
 
 // programar / inicializar la sincronización diaria de datos de anime
 // import syncAllAnime from './controllers/syncAnime.js';
@@ -157,7 +214,6 @@ app.get('/api/debug-session', (req, res) => {
 		cookies: req.headers.cookie,
 		session: req.session,
 		isProduction,
-		cookieDomain,
 		envKeys: Object.keys(process.env).filter(k => k.includes('SESSION') || k.includes('FRONTEND') || k.includes('COOKIE'))
 	});
 });
