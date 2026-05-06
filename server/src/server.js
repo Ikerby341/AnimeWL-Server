@@ -250,9 +250,10 @@ app.get('/api/anime', async (req, res) => {
 	try {
 		const limit = Number(req.query.limit);
 		const offset = Number(req.query.offset || 0);
+		const genre = typeof req.query.genre === 'string' && req.query.genre.trim() !== '' ? req.query.genre.trim() : null;
 		const hasPagination = Number.isFinite(limit) && limit > 0;
 		const fetchLimit = hasPagination ? limit + 1 : null;
-		const anime = await listAnimes(null, fetchLimit, offset);
+		const anime = await listAnimes(genre, fetchLimit, offset);
 		const hasMore = hasPagination && anime.length > limit;
 
 		res.json({
@@ -264,6 +265,24 @@ app.get('/api/anime', async (req, res) => {
 	} catch (err) {
 		console.error('GET /api/anime error', err);
 		res.status(500).json({ success: false, error: err.message });
+	}
+});
+
+app.get('/api/genres', async (req, res) => {
+	try {
+		const { data, error } = await supabase
+			.from('genere')
+			.select('id_genere, nom')
+			.order('nom', { ascending: true });
+
+		if (error) {
+			throw error;
+		}
+
+		return res.json({ success: true, genres: data || [] });
+	} catch (err) {
+		console.error('GET /api/genres error', err);
+		return res.status(500).json({ success: false, error: err.message });
 	}
 });
 
