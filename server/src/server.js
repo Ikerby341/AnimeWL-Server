@@ -322,8 +322,22 @@ async function fetchAnimeFromDb(query) {
 	}
 }
 
+const EXCLUDED_GENRE_IDS = new Set([9, 49]);
+
+function hasExcludedGenreEntry(entries = []) {
+	return Array.isArray(entries) && entries.some((entry) => EXCLUDED_GENRE_IDS.has(Number(entry?.mal_id)));
+}
+
+function filterSafeAnimeSearchResults(animes = []) {
+	return (animes || []).filter((anime) => (
+		!hasExcludedGenreEntry(anime?.genres) &&
+		!hasExcludedGenreEntry(anime?.explicit_genres) &&
+		!hasExcludedGenreEntry(anime?.themes)
+	));
+}
+
 async function fetchJikanSearch(query) {
-	const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=10&sfw=true&rating=r17`;
+	const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=10&sfw=true`;
 	let attempts = 0;
 	while (true) {
 		try {
@@ -333,7 +347,7 @@ async function fetchJikanSearch(query) {
 					'User-Agent': 'AnimeWL/1.0'
 				}
 			});
-			return response.data?.data || [];
+			return filterSafeAnimeSearchResults(response.data?.data || []);
 		} catch (err) {
 			const status = err.response?.status;
 			if (status === 429 && attempts < 3) {
