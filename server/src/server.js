@@ -13,7 +13,7 @@ import { findAnimeById, listAnimes, testDbConnection, getEpisodeCountByAnime } f
 import { findCommentsByAnimeId, insertComment, deleteCommentById } from './models/comment_model.js';
 import { registerUser, findUserByNom, findUserByEmail, updateUserProfilePicture, updateUserAnimeChoice, updateUsername, updateUserPassword, updateUserEmail, updateResetPasswordToken, findUserByResetToken, clearResetPasswordToken, findPublicUserById } from './models/users_model.js';
 import { findRatingSummaryByAnimeId, findRatingByAnimeAndUser, saveRating } from './models/rating_model.js';
-import { findProgressByAnimeAndUser, saveProgress, getUserStats } from './models/progress_model.js';
+import { findProgressByAnimeAndUser, saveProgress, getUserStats, calculateWatchedMinutesForAnime } from './models/progress_model.js';
 import { findFavoritesByUser, findFavoriteById, addFavorite, removeFavorite, updateFavoriteStatus, findPublicFavoritesByUser } from './models/favorites_model.js';
 
 function hashPassword(password) {
@@ -671,25 +671,8 @@ app.post('/api/anime/:id/progress', async (req, res) => {
 		return res.status(400).json({ success: false, error: 'El número de capítulos visto no es válido.' });
 	}
 
-	let totalMinutes = 0;
-	if (chaptersWatched > 0) {
-		const { data: chapterRows, error: capErr } = await supabase
-			.from('capitol')
-			.select('numero, duracio_minuts')
-			.eq('id_anime', id)
-			.order('numero', { ascending: true });
-
-		if (capErr) {
-			console.error('POST /api/anime/:id/progress capitol lookup error', capErr);
-		} else {
-			totalMinutes = (chapterRows || []).reduce((sum, row) => {
-				const minutes = Number(row.duracio_minuts);
-				return sum + (Number.isFinite(minutes) ? minutes : 0);
-			}, 0);
-		}
-	}
-
 	try {
+		const totalMinutes = await calculateWatchedMinutesForAnime(id, chaptersWatched);
 		const savedProgress = await saveProgress({
 			id_usuari: req.session.user.id_usuari,
 			id_anime: id,

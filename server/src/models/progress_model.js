@@ -1,5 +1,31 @@
 import { randomUUID } from 'crypto';
 import supabase from '../config/db.js';
+import { getEpisodeCountByAnime } from './anime_model.js';
+
+export async function calculateWatchedMinutesForAnime(id_anime, capitols_vistos) {
+    const chaptersWatched = Number(capitols_vistos);
+
+    if (!id_anime || !Number.isFinite(chaptersWatched) || chaptersWatched <= 0) {
+        return 0;
+    }
+
+    const { data: chapterRows, error: capErr } = await supabase
+        .from('capitol')
+        .select('numero, duracio_minuts')
+        .eq('id_anime', id_anime)
+        .order('numero', { ascending: true })
+        .limit(chaptersWatched);
+
+    if (capErr) {
+        console.error('calculateWatchedMinutesForAnime error', capErr);
+        throw capErr;
+    }
+
+    return (chapterRows || []).reduce((sum, row) => {
+        const minutes = Number(row.duracio_minuts);
+        return sum + (Number.isFinite(minutes) ? minutes : 0);
+    }, 0);
+}
 
 export async function findProgressByAnimeAndUser(id_anime, id_usuari) {
     if (!id_anime || !id_usuari) return null;
@@ -115,21 +141,17 @@ export async function getUserStats(id_usuari) {
         };
     });
 
-    const { data: capRows, error: capErr } = await supabase
-        .from('capitol')
-        .select('id_anime')
-        .in('id_anime', animeIds);
-
-    if (capErr) {
-        console.error('getUserStats capRows error', capErr);
-        throw capErr;
-    }
-
     const episodeCounts = {};
-    (capRows || []).forEach((row) => {
-        const animeId = String(row.id_anime);
-        episodeCounts[animeId] = (episodeCounts[animeId] || 0) + 1;
-    });
+    await Promise.all(
+        animeIds.map(async (animeId) => {
+            try {
+                episodeCounts[animeId] = await getEpisodeCountByAnime(animeId);
+            } catch (err) {
+                console.error(`getUserStats episode count error for anime ${animeId}`, err);
+                episodeCounts[animeId] = 0;
+            }
+        })
+    );
 
     const totalMinutes = progresRows.reduce(
         (sum, row) => sum + Number(row.minuts_totals || 0),
