@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import supabase from '../config/db.js';
 import { getEpisodeCountByAnime } from './anime_model.js';
+import { calculateTotalChapters, calculateTotalMinutes, countFinishedAnimes, sumChapterMinutes } from './progress_stats.js';
 
 export async function calculateWatchedMinutesForAnime(id_anime, capitols_vistos) {
     const chaptersWatched = Number(capitols_vistos);
@@ -21,10 +22,7 @@ export async function calculateWatchedMinutesForAnime(id_anime, capitols_vistos)
         throw capErr;
     }
 
-    return (chapterRows || []).reduce((sum, row) => {
-        const minutes = Number(row.duracio_minuts);
-        return sum + (Number.isFinite(minutes) ? minutes : 0);
-    }, 0);
+    return sumChapterMinutes(chapterRows || [], chaptersWatched);
 }
 
 export async function findProgressByAnimeAndUser(id_anime, id_usuari) {
@@ -153,14 +151,8 @@ export async function getUserStats(id_usuari) {
         })
     );
 
-    const totalMinutes = progresRows.reduce(
-        (sum, row) => sum + Number(row.minuts_totals || 0),
-        0
-    );
-    const totalChapters = progresRows.reduce(
-        (sum, row) => sum + Number(row.capitols_vistos || 0),
-        0
-    );
+    const totalMinutes = calculateTotalMinutes(progresRows);
+    const totalChapters = calculateTotalChapters(progresRows);
 
     const { data: genreRows, error: genreErr } = await supabase
         .from('anime_genere')
@@ -253,11 +245,7 @@ export async function getUserStats(id_usuari) {
         .sort((a, b) => b.minutes - a.minutes)
         .slice(0, 3);
 
-    const finishedAnimeCount = progresRows.reduce((count, row) => {
-        const animeId = String(row.id_anime);
-        const chapterCount = episodeCounts[animeId] || 0;
-        return count + (chapterCount > 0 && Number(row.capitols_vistos || 0) >= chapterCount ? 1 : 0);
-    }, 0);
+    const finishedAnimeCount = countFinishedAnimes(progresRows, episodeCounts);
 
     return {
         totalMinutes,
