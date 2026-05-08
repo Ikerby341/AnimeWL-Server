@@ -137,7 +137,7 @@ const PORT = process.env.PORT || 3000;
 const COMMENT_MAX_LENGTH = 255;
 
 const isProduction = process.env.NODE_ENV === 'production';
-const frontendUrl = process.env.FRONTEND_URL || (isProduction ? 'https://animewl.cat' : 'http://localhost:5173');
+const frontendUrl = process.env.FRONTEND_URL;
 
 function appUsesEmailRelay() {
 	return Boolean(process.env.EMAIL_RELAY_URL && process.env.EMAIL_RELAY_SECRET);
