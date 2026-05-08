@@ -98,7 +98,7 @@ function getMailTransporter() {
 	});
 }
 
-async function sendVerificationEmail(to, code) {
+async function sendVerificationEmailSmtpLegacy(to, code) {
 	const transporter = getMailTransporter();
 	const from = process.env.EMAIL_FROM || process.env.EMAIL_SMTP_USER;
 	const mailOptions = {
@@ -111,7 +111,7 @@ async function sendVerificationEmail(to, code) {
 	return transporter.sendMail(mailOptions);
 }
 
-async function sendPasswordResetEmail(to, resetToken) {
+async function sendPasswordResetEmailSmtpLegacy(to, resetToken) {
 	const transporter = getMailTransporter();
 	const from = process.env.EMAIL_FROM || process.env.EMAIL_SMTP_USER;
 	const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
@@ -138,6 +138,71 @@ const COMMENT_MAX_LENGTH = 255;
 
 const isProduction = process.env.NODE_ENV === 'production';
 const frontendUrl = process.env.FRONTEND_URL || (isProduction ? 'https://animewl.cat' : 'http://localhost:5173');
+
+function appUsesEmailRelay() {
+	return Boolean(process.env.EMAIL_RELAY_URL && process.env.EMAIL_RELAY_SECRET);
+}
+
+async function sendMailThroughRelay({ to, subject, text, html }) {
+	const relayUrl = process.env.EMAIL_RELAY_URL;
+	const relaySecret = process.env.EMAIL_RELAY_SECRET;
+	const from = process.env.EMAIL_FROM || process.env.EMAIL_SMTP_USER;
+
+	if (!relayUrl || !relaySecret) {
+		throw new Error('Faltan variables de entorno del relay de correo (EMAIL_RELAY_URL, EMAIL_RELAY_SECRET)');
+	}
+
+	const response = await axios.post(relayUrl, {
+		secret: relaySecret,
+		from,
+		to,
+		subject,
+		text,
+		html
+	}, {
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		timeout: 15000
+	});
+
+	if (response.data && response.data.success === false) {
+		throw new Error(response.data.error || 'El relay de correo devolvio un error');
+	}
+}
+
+async function dispatchAppEmail({ to, subject, text, html }) {
+	if (appUsesEmailRelay()) {
+		return sendMailThroughRelay({ to, subject, text, html });
+	}
+
+	const transporter = getMailTransporter();
+	const from = process.env.EMAIL_FROM || process.env.EMAIL_SMTP_USER;
+	return transporter.sendMail({ from, to, subject, text, html });
+}
+
+async function sendVerificationEmail(to, code) {
+	return dispatchAppEmail({
+		to,
+		subject: 'Codigo de verificacion para cambio de correo',
+		text: `Tu codigo de verificacion es: ${code}. Introduce este codigo en la seccion de configuracion para cambiar tu correo electronico.`,
+		html: `<p>Tu codigo de verificacion es: <strong>${code}</strong></p><p>Introduce este codigo en la seccion de configuracion para cambiar tu correo electronico.</p>`
+	});
+}
+
+async function sendPasswordResetEmail(to, resetToken) {
+	const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+	return dispatchAppEmail({
+		to,
+		subject: 'Restablecer tu contrasena de AnimeWL',
+		text: `Has solicitado restablecer tu contrasena. Haz clic en el siguiente enlace para crear una nueva contrasena: ${resetUrl}\n\nSi no solicitaste esto, ignora este correo.`,
+		html: `<p>Has solicitado restablecer tu contrasena.</p>
+			<p>Haz clic en el siguiente enlace para crear una nueva contrasena:</p>
+			<p><a href="${resetUrl}">${resetUrl}</a></p>
+			<p>Si no solicitaste esto, ignora este correo.</p>`
+	});
+}
 
 // Middleware JSON
 app.use(express.json());
