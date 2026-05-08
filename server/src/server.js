@@ -136,8 +136,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const COMMENT_MAX_LENGTH = 255;
 
-const isProduction = process.env.NODE_ENV === 'production';
-const frontendUrl = process.env.FRONTEND_URL;
+const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
+const frontendUrl = process.env.FRONTEND_URL || (isProduction ? 'https://animewl.cat' : 'http://localhost:5173');
 
 function appUsesEmailRelay() {
 	return Boolean(process.env.EMAIL_RELAY_URL && process.env.EMAIL_RELAY_SECRET);
@@ -181,26 +181,77 @@ async function dispatchAppEmail({ to, subject, text, html }) {
 	return transporter.sendMail({ from, to, subject, text, html });
 }
 
+function renderAnimeWlEmail({ title, intro, bodyHtml, buttonLabel = null, buttonUrl = null, footer }) {
+	return `
+		<div style="margin:0;padding:32px 16px;background-color:#0b0b0b;font-family:Arial,sans-serif;color:#ffffff;">
+			<div style="max-width:620px;margin:0 auto;background-color:#111111;border:1px solid #222222;border-radius:20px;overflow:hidden;">
+				<div style="padding:28px 32px;border-bottom:1px solid #1f1f1f;background-color:#000000;">
+					<div style="font-size:30px;font-weight:800;line-height:1;color:#ffffff;">
+						Anime<span style="color:#18c443;">WL</span>
+					</div>
+				</div>
+				<div style="padding:32px;">
+					<h1 style="margin:0 0 16px;font-size:28px;line-height:1.2;color:#ffffff;">${title}</h1>
+					<p style="margin:0 0 20px;font-size:16px;line-height:1.7;color:#f3f3f3;">${intro}</p>
+					${bodyHtml}
+					${buttonLabel && buttonUrl ? `
+						<div style="margin:28px 0 12px;">
+							<a
+								href="${buttonUrl}"
+								style="display:inline-block;padding:14px 22px;border-radius:12px;background-color:#18c443;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;"
+							>${buttonLabel}</a>
+						</div>
+					` : ''}
+					<p style="margin:28px 0 0;font-size:13px;line-height:1.6;color:#b0b0b0;">${footer}</p>
+				</div>
+			</div>
+		</div>
+	`;
+}
+
 async function sendVerificationEmail(to, code) {
+	const intro = 'Has solicitado verificar tu identidad para cambiar el correo electronico asociado a tu cuenta.';
+	const bodyHtml = `
+		<p style="margin:0 0 12px;font-size:15px;line-height:1.7;color:#f3f3f3;">Introduce este codigo en la seccion de configuracion de AnimeWL:</p>
+		<div style="display:inline-block;margin:8px 0 4px;padding:14px 20px;border-radius:14px;background-color:#000000;border:1px solid #2a2a2a;color:#18c443;font-size:32px;font-weight:800;letter-spacing:4px;">
+			${code}
+		</div>
+	`;
+
 	return dispatchAppEmail({
 		to,
 		subject: 'Codigo de verificacion para cambio de correo',
 		text: `Tu codigo de verificacion es: ${code}. Introduce este codigo en la seccion de configuracion para cambiar tu correo electronico.`,
-		html: `<p>Tu codigo de verificacion es: <strong>${code}</strong></p><p>Introduce este codigo en la seccion de configuracion para cambiar tu correo electronico.</p>`
+		html: renderAnimeWlEmail({
+			title: 'Cambio de correo',
+			intro,
+			bodyHtml,
+			footer: 'Si no has solicitado este cambio, puedes ignorar este correo sin hacer nada.'
+		})
 	});
 }
 
 async function sendPasswordResetEmail(to, resetToken) {
 	const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+	const intro = 'Hemos recibido una solicitud para restablecer la contraseña de tu cuenta de AnimeWL.';
+	const bodyHtml = `
+		<p style="margin:0 0 12px;font-size:15px;line-height:1.7;color:#f3f3f3;">Pulsa el boton para crear una nueva contraseña de forma segura.</p>
+		<p style="margin:0;font-size:14px;line-height:1.7;color:#b0b0b0;">Si el boton no funciona, copia y pega este enlace en tu navegador:</p>
+		<p style="margin:10px 0 0;word-break:break-word;font-size:14px;line-height:1.7;color:#18c443;">${resetUrl}</p>
+	`;
 
 	return dispatchAppEmail({
 		to,
-		subject: 'Restablecer tu contrasena de AnimeWL',
-		text: `Has solicitado restablecer tu contrasena. Haz clic en el siguiente enlace para crear una nueva contrasena: ${resetUrl}\n\nSi no solicitaste esto, ignora este correo.`,
-		html: `<p>Has solicitado restablecer tu contrasena.</p>
-			<p>Haz clic en el siguiente enlace para crear una nueva contrasena:</p>
-			<p><a href="${resetUrl}">${resetUrl}</a></p>
-			<p>Si no solicitaste esto, ignora este correo.</p>`
+		subject: 'Restablecer tu contraseña de AnimeWL',
+		text: `Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace para crear una nueva contraseña: ${resetUrl}\n\nSi no solicitaste esto, ignora este correo.`,
+		html: renderAnimeWlEmail({
+			title: 'Restablecer contraseña',
+			intro,
+			bodyHtml,
+			buttonLabel: 'Restablecer contraseña',
+			buttonUrl: resetUrl,
+			footer: 'Si no has solicitado este cambio, ignora este correo y tu contraseña seguirá igual.'
+		})
 	});
 }
 
