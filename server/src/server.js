@@ -137,7 +137,7 @@ const PORT = process.env.PORT || 3000;
 const COMMENT_MAX_LENGTH = 255;
 
 const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
-const frontendUrl = process.env.FRONTEND_URL || (isProduction ? 'https://animewl.cat' : 'http://localhost:5173');
+const frontendUrl = 'https://animewl.cat';
 
 function appUsesEmailRelay() {
 	return Boolean(process.env.EMAIL_RELAY_URL && process.env.EMAIL_RELAY_SECRET);
@@ -198,7 +198,7 @@ function renderAnimeWlEmail({ title, intro, bodyHtml, buttonLabel = null, button
 						<div style="margin:28px 0 12px;">
 							<a
 								href="${buttonUrl}"
-								style="display:inline-block;padding:14px 22px;border-radius:12px;background-color:#18c443;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;"
+								style="display:inline-block;padding:14px 22px;border-radius:12px;background-color:#209F36;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;"
 							>${buttonLabel}</a>
 						</div>
 					` : ''}
