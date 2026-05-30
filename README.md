@@ -64,7 +64,6 @@ El script executa primer les proves i després inicia `src/server.js`.
 - `server/src/server.js`: fitxer principal; configura Express, CORS, sessions, autenticació, correus, rutes de l'API i arrencada del servidor.
 - `server/src/app.js`: fitxer reservat per separar l'app Express, actualment sense lògica.
 - `server/src/config/db.js`: carrega `.env`, crea el client de Supabase i valida que existeixin `SUPABASE_URL` i `SUPABASE_KEY`.
-- `server/src/config/supabase-session-store.js`: peça de configuració per treballar amb sessions a Supabase.
 - `server/src/controllers/syncAnime.js`: sincronitza animes, gèneres i capítols des de Jikan cap a Supabase, amb control de rate limit i reintents.
 - `server/src/models`: capa d'accés a dades de Supabase.
 - `server/vercel.json`: configura el desplegament de `src/server.js` com a funció de Vercel.

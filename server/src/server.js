@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { randomUUID, randomBytes, scryptSync, createHmac } from 'crypto';
-import session from 'express-session';
 import cookieSession from 'cookie-session';
 import nodemailer from 'nodemailer';
 import { syncAnimeById, syncAnimeMetadataById, mapJikanToDb } from './controllers/syncAnime.js';
