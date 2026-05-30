@@ -144,8 +144,8 @@ El codi limita les peticions a Jikan, reintenta quan rep `429`, evita peticions 
 
 ### Recuperació de contrasenya
 
-- `POST /api/forgot-password`: genera un token i envia un correu de recuperació sense revelar si l'email existeix.
-- `GET /api/verify-reset-token`: valida que el token existeix i no ha caducat.
+- `POST /api/forgot-password`: genera un token, en desa només el hash i envia un correu de recuperació sense revelar si l'email existeix.
+- `GET /api/verify-reset-token`: valida el hash del token i comprova que no ha caducat.
 - `POST /api/reset-password`: desa la nova contrasenya i neteja el token.
 
 ## Seguretat i sessions

@@ -20,6 +20,18 @@ function hashPassword(password) {
 	return `${salt}:${hashed}`;
 }
 
+function createResetPasswordToken() {
+	return randomBytes(32).toString('base64url');
+}
+
+function hashResetPasswordToken(token) {
+	const secret = process.env.RESET_PASSWORD_TOKEN_SECRET || process.env.SESSION_SECRET;
+	if (!secret) {
+		throw new Error('RESET_PASSWORD_TOKEN_SECRET or SESSION_SECRET must be configured');
+	}
+	return createHmac('sha256', secret).update(token).digest('hex');
+}
+
 function validateEmail(email) {
 	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -1493,10 +1505,11 @@ app.post('/api/forgot-password', async (req, res) => {
 		}
 
 		// Generar token de recuperación
-		const resetToken = randomUUID();
+		const resetToken = createResetPasswordToken();
+		const resetTokenHash = hashResetPasswordToken(resetToken);
 
-		// Guardar token en la base de datos
-		const updateResult = await updateResetPasswordToken(email.trim(), resetToken);
+		// Guardar solo el hash del token en la base de datos
+		const updateResult = await updateResetPasswordToken(email.trim(), resetTokenHash);
 
 		if (updateResult.error) {
 			console.error('Error saving reset token:', updateResult.error);
@@ -1517,12 +1530,13 @@ app.post('/api/forgot-password', async (req, res) => {
 app.get('/api/verify-reset-token', async (req, res) => {
 	const { token } = req.query;
 
-	if (!token) {
+	if (typeof token !== 'string' || !token) {
 		return res.status(400).json({ success: false, error: 'Token requerido.' });
 	}
 
 	try {
-		const result = await findUserByResetToken(token);
+		const resetTokenHash = hashResetPasswordToken(token);
+		const result = await findUserByResetToken(resetTokenHash);
 
 		if (result.error) {
 			console.error('Error verifying reset token:', result.error);
@@ -1552,7 +1566,7 @@ app.get('/api/verify-reset-token', async (req, res) => {
 app.post('/api/reset-password', async (req, res) => {
 	const { token, newPassword, confirmPassword } = req.body;
 
-	if (!token || !newPassword || !confirmPassword) {
+	if (typeof token !== 'string' || !token || !newPassword || !confirmPassword) {
 		return res.status(400).json({ success: false, error: 'Todos los campos son requeridos.' });
 	}
 
@@ -1565,8 +1579,9 @@ app.post('/api/reset-password', async (req, res) => {
 	}
 
 	try {
-		// Buscar usuario por token
-		const result = await findUserByResetToken(token);
+		// Buscar usuario por hash del token
+		const resetTokenHash = hashResetPasswordToken(token);
+		const result = await findUserByResetToken(resetTokenHash);
 
 		if (result.error) {
 			console.error('Error finding user by reset token:', result.error);

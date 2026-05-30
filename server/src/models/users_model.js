@@ -123,20 +123,20 @@ export async function updateUserPassword(id_usuari, newPassword) {
     return await supabase.from('usuari').update({ contrasenya: newPassword }).eq('id_usuari', id_usuari).select().maybeSingle();
 }
 
-export async function updateResetPasswordToken(email, token) {
+export async function updateResetPasswordToken(email, tokenHash) {
     // Token expira en 15 minutos
     const expirationDate = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     return await supabase.from('usuari').update({
-        reset_password_token: token,
+        reset_password_token: tokenHash,
         reset_password_token_expiredate: expirationDate
     }).eq('email', email).select().maybeSingle();
 }
 
-export async function findUserByResetToken(token) {
+export async function findUserByResetToken(tokenHash) {
     return await supabase
         .from('usuari')
         .select('id_usuari, nom, email, reset_password_token, reset_password_token_expiredate')
-        .eq('reset_password_token', token)
+        .eq('reset_password_token', tokenHash)
         .maybeSingle();
 }
 
