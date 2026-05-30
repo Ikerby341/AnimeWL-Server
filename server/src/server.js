@@ -65,6 +65,38 @@ function verifyAuthToken(token) {
 	}
 }
 
+function getBearerToken(req) {
+	const authHeader = req.headers.authorization || '';
+	return authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+}
+
+function getUserId(user) {
+	return user?.id_usuari || user?.id_usuario || user?.id_user || user?.id || null;
+}
+
+function getAuthenticatedTokenUser(req) {
+	return verifyAuthToken(getBearerToken(req));
+}
+
+function isSameAuthenticatedUser(sessionUser, tokenUser) {
+	const sessionUserId = getUserId(sessionUser);
+	const tokenUserId = getUserId(tokenUser);
+
+	if (sessionUserId && tokenUserId) {
+		return sessionUserId === tokenUserId;
+	}
+
+	if (sessionUser?.email && tokenUser?.email) {
+		return sessionUser.email === tokenUser.email;
+	}
+
+	if (sessionUser?.nom && tokenUser?.nom) {
+		return sessionUser.nom === tokenUser.nom;
+	}
+
+	return false;
+}
+
 function getMailTransporter() {
 	const host = process.env.EMAIL_SMTP_HOST;
 	const port = Number(process.env.EMAIL_SMTP_PORT);
@@ -1039,16 +1071,34 @@ app.post('/api/anime/sync/:id', async (req, res) => {
 	}
 });
 
-app.get('/api/settings/update-username', async (req, res) => {
+app.get('/api/settings/update-username', (req, res) => {
+	res.set('Allow', 'POST');
+	return res.status(405).json({ success: false, error: 'Usa POST para actualizar el nombre de usuario.' });
+});
+
+app.post('/api/settings/update-username', async (req, res) => {
 	if (!req.session.user) {
 		return res.status(401).json({ success: false, error: 'No hay sesión activa' });
 	}
-	const { newUsername } = req.query;
-	if (!newUsername || newUsername.trim() === '') {
+	const tokenUser = getAuthenticatedTokenUser(req);
+	if (!tokenUser) {
+		return res.status(401).json({ success: false, error: 'Token de autenticacion requerido.' });
+	}
+	if (!isSameAuthenticatedUser(req.session.user, tokenUser)) {
+		return res.status(403).json({ success: false, error: 'El token no coincide con la sesion activa.' });
+	}
+
+	const { newUsername } = req.body;
+	if (typeof newUsername !== 'string' || newUsername.trim() === '') {
 		return res.status(400).json({ success: false, error: 'El nombre de usuario no puede estar vacío' });
 	}
 	try {
-		const userId = req.session.user.id_usuari || req.session.user.id_usuario || req.session.user.id_user || req.session.user.id;
+		const trimmedUsername = newUsername.trim();
+		if (trimmedUsername.length > 30) {
+			return res.status(400).json({ success: false, error: 'El nombre de usuario no puede superar 30 caracteres.' });
+		}
+
+		const userId = getUserId(req.session.user);
 		let currentUser = null;
 
 		if (req.session.user.email) {
@@ -1078,7 +1128,6 @@ app.get('/api/settings/update-username', async (req, res) => {
 			return res.status(404).json({ success: false, error: 'Usuario de sesion no encontrado.' });
 		}
 
-		const trimmedUsername = newUsername.trim();
 		const { data, error } = await updateUsername(updateUserId, trimmedUsername);
 		if (error) {
 			console.error('Error updating username:', error);

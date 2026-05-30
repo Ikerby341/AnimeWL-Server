@@ -137,7 +137,7 @@ El codi limita les peticions a Jikan, reintenta quan rep `429`, evita peticions 
 - `GET /api/session`: retorna la sessió actual o `user: null`.
 - `GET /api/check-session`: comprova i refresca dades de sessió des de Supabase.
 - `POST /api/logout`: tanca la sessió.
-- `GET /api/settings/update-username`: canvia el nom d'usuari.
+- `POST /api/settings/update-username`: canvia el nom d'usuari amb sessió activa i token d'autorització.
 - `POST /api/user/anime`: desa anime preferit o recomanat al perfil.
 - `POST /api/update-profile-picture`: actualitza la foto de perfil.
 - `POST /api/user/update-password`: canvia la contrasenya amb validació de la contrasenya actual.
