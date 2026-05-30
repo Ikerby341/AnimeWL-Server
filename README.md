@@ -66,7 +66,6 @@ El script executa primer les proves i després inicia `src/server.js`.
 - `server/src/config/db.js`: carrega `.env`, crea el client de Supabase i valida que existeixin `SUPABASE_URL` i `SUPABASE_KEY`.
 - `server/src/config/supabase-session-store.js`: peça de configuració per treballar amb sessions a Supabase.
 - `server/src/controllers/syncAnime.js`: sincronitza animes, gèneres i capítols des de Jikan cap a Supabase, amb control de rate limit i reintents.
-- `server/src/controllers/controller.js`: fitxer de controlador general, actualment sense lògica activa.
 - `server/src/models`: capa d'accés a dades de Supabase.
 - `server/vercel.json`: configura el desplegament de `src/server.js` com a funció de Vercel.
 - `server/package.json` i `server/package-lock.json`: dependències, scripts i versions bloquejades.
@@ -74,7 +73,7 @@ El script executa primer les proves i després inicia `src/server.js`.
 
 ## Models de dades
 
-- `anime_model.js`: cerca, llista i actualitza animes; insereix o actualitza gèneres; desa capítols; calcula el nombre de capítols; comprova la connexió amb Supabase.
+- `anime_model.js`: cerca, llista i actualitza animes; llista gèneres; insereix o actualitza gèneres; desa capítols; calcula capítols emmagatzemats o pendents; comprova la connexió amb Supabase.
 - `users_model.js`: registra usuaris, cerca per nom o email, actualitza foto, nom, email, contrasenya, anime preferit/recomanat i tokens de recuperació.
 - `favorites_model.js`: llegeix, afegeix, elimina i actualitza favorits i exposa favorits públics.
 - `comment_model.js`: llegeix, crea i elimina comentaris d'anime.

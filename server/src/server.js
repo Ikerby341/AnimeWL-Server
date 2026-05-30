@@ -7,9 +7,8 @@ import { randomUUID, randomBytes, scryptSync, createHmac } from 'crypto';
 import session from 'express-session';
 import cookieSession from 'cookie-session';
 import nodemailer from 'nodemailer';
-import supabase from './config/db.js';
 import { syncAnimeById, syncAnimeMetadataById, mapJikanToDb } from './controllers/syncAnime.js';
-import { findAnimeById, listAnimes, testDbConnection, getEpisodeCountByAnime } from './models/anime_model.js';
+import { findAnimeById, listAnimes, testDbConnection, getEpisodeCountByAnime, listGenres, findAnimesByTitle } from './models/anime_model.js';
 import { findCommentsByAnimeId, insertComment, deleteCommentById } from './models/comment_model.js';
 import { registerUser, findUserByNom, findUserByEmail, updateUserProfilePicture, updateUserAnimeChoice, updateUsername, updateUserPassword, updateUserEmail, updateResetPasswordToken, findUserByResetToken, clearResetPasswordToken, findPublicUserById } from './models/users_model.js';
 import { findRatingSummaryByAnimeId, findRatingByAnimeAndUser, saveRating } from './models/rating_model.js';
@@ -418,16 +417,8 @@ app.get('/api/anime', async (req, res) => {
 
 app.get('/api/genres', async (req, res) => {
 	try {
-		const { data, error } = await supabase
-			.from('genere')
-			.select('id_genere, nom')
-			.order('nom', { ascending: true });
-
-		if (error) {
-			throw error;
-		}
-
-		return res.json({ success: true, genres: data || [] });
+		const genres = await listGenres();
+		return res.json({ success: true, genres });
 	} catch (err) {
 		console.error('GET /api/genres error', err);
 		return res.status(500).json({ success: false, error: err.message });
@@ -471,22 +462,7 @@ app.get('/api/anime/genre/:genreId/:limit', async (req, res) => {
 });
 
 async function fetchAnimeFromDb(query) {
-	try {
-		const { data, error } = await supabase
-			.from('anime')
-			.select('*')
-			.ilike('titol', `%${query}%`)
-			.order('lastupdate', { ascending: false })
-			.limit(10);
-		if (error) {
-			console.error('fetchAnimeFromDb error', error);
-			return [];
-		}
-		return data || [];
-	} catch (err) {
-		console.error('fetchAnimeFromDb thrown error', err);
-		return [];
-	}
+	return findAnimesByTitle(query);
 }
 
 const EXCLUDED_GENRE_IDS = new Set([9, 49]);

@@ -1,6 +1,5 @@
 import axios from 'axios';
-import { upsertAnime, upsertAnimeGenres, upsertChapters, touchAnimeLastUpdate, hasUsableEpisodeDetail } from '../models/anime_model.js';
-import supabase from '../config/db.js';
+import { upsertAnime, upsertAnimeGenres, upsertChapters, touchAnimeLastUpdate, hasUsableEpisodeDetail, getMaxStoredEpisode, getFirstMissingEpisode } from '../models/anime_model.js';
 
 let lastJikanRequestAt = 0;
 
@@ -70,63 +69,6 @@ async function fetchJikanJson(url) {
             throw err;
         }
     }
-}
-
-// obtener el número del último episodio almacenado en BBDD para un anime
-async function getMaxStoredEpisode(id_anime) {
-    try {
-        const { data: maxRow, error } = await supabase
-            .from('capitol')
-            .select('numero')
-            .eq('id_anime', id_anime)
-            .order('numero', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (!error && maxRow) return maxRow.numero || 0;
-    } catch (err) {
-        console.error('getMaxStoredEpisode error', err.message);
-    }
-    return 0;
-}
-
-async function getFirstMissingEpisode(id_anime, episodeCount) {
-    if (!id_anime || !Number.isFinite(episodeCount) || episodeCount <= 0) {
-        return null;
-    }
-
-    const storedNumbers = new Set();
-    const pageSize = 1000;
-
-    for (let from = 0; ; from += pageSize) {
-        const { data, error } = await supabase
-            .from('capitol')
-            .select('numero')
-            .eq('id_anime', id_anime)
-            .order('numero', { ascending: true })
-            .range(from, from + pageSize - 1);
-
-        if (error) {
-            console.error('getFirstMissingEpisode error', error);
-            return null;
-        }
-
-        for (const row of data || []) {
-            const numero = Number(row.numero);
-            if (Number.isFinite(numero)) {
-                storedNumbers.add(numero);
-            }
-        }
-
-        if (!data || data.length < pageSize) break;
-    }
-
-    for (let episode = 1; episode <= episodeCount; episode++) {
-        if (!storedNumbers.has(episode)) {
-            return episode;
-        }
-    }
-
-    return null;
 }
 
 function getEpisodeListTotal(json) {

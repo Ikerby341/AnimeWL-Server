@@ -44,10 +44,14 @@ export async function findAnimeById(id_anime) {
 }
 
 export async function getEpisodeCountByAnime(id_anime) {
+    return Number(await getMaxStoredEpisode(id_anime));
+}
+
+export async function getMaxStoredEpisode(id_anime) {
     if (!id_anime) return 0;
 
     try {
-        const { data, error } = await supabase
+        const { data: maxRow, error } = await supabase
             .from('capitol')
             .select('numero')
             .eq('id_anime', id_anime)
@@ -55,14 +59,52 @@ export async function getEpisodeCountByAnime(id_anime) {
             .limit(1)
             .maybeSingle();
 
-        if (!error && data) {
-            return Number(data.numero || 0);
-        }
+        if (!error && maxRow) return maxRow.numero || 0;
     } catch (err) {
-        console.error('episode count query error', err);
+        console.error('getMaxStoredEpisode error', err.message);
     }
 
     return 0;
+}
+
+export async function getFirstMissingEpisode(id_anime, episodeCount) {
+    if (!id_anime || !Number.isFinite(episodeCount) || episodeCount <= 0) {
+        return null;
+    }
+
+    const storedNumbers = new Set();
+    const pageSize = 1000;
+
+    for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+            .from('capitol')
+            .select('numero')
+            .eq('id_anime', id_anime)
+            .order('numero', { ascending: true })
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            console.error('getFirstMissingEpisode error', error);
+            return null;
+        }
+
+        for (const row of data || []) {
+            const numero = Number(row.numero);
+            if (Number.isFinite(numero)) {
+                storedNumbers.add(numero);
+            }
+        }
+
+        if (!data || data.length < pageSize) break;
+    }
+
+    for (let episode = 1; episode <= episodeCount; episode++) {
+        if (!storedNumbers.has(episode)) {
+            return episode;
+        }
+    }
+
+    return null;
 }
 
 export async function testDbConnection() {
@@ -70,6 +112,40 @@ export async function testDbConnection() {
         .from('anime')
         .select('*')
         .limit(1);
+}
+
+export async function listGenres() {
+    const { data, error } = await supabase
+        .from('genere')
+        .select('id_genere, nom')
+        .order('nom', { ascending: true });
+
+    if (error) {
+        throw error;
+    }
+
+    return data || [];
+}
+
+export async function findAnimesByTitle(query, limit = 10) {
+    try {
+        const { data, error } = await supabase
+            .from('anime')
+            .select('*')
+            .ilike('titol', `%${query}%`)
+            .order('lastupdate', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            console.error('findAnimesByTitle error', error);
+            return [];
+        }
+
+        return data || [];
+    } catch (err) {
+        console.error('findAnimesByTitle thrown error', err);
+        return [];
+    }
 }
 
 export async function insertAnime(record) {
