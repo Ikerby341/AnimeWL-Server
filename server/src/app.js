@@ -42,7 +42,7 @@ export function createApp() {
 	app.set('views', path.join(__dirname, '../plantilles'));
 	app.set('view engine', 'ejs');
 
-	app.use(createSystemRouter({ isProduction }));
+	app.use(createSystemRouter());
 	app.use(createAnimeRouter());
 	app.use(createUserRouter());
 

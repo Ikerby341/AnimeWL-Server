@@ -233,12 +233,10 @@ export async function syncAnimeById(idAnime) {
         skipEpisodeDetailForNumbers.push(1);
     }
 
-    console.log(`syncAnimeById [${idAnime}]: API reports ${apiEpisodeCount} episodes`);
 
     // número del último episodio almacenado (no conteo de filas, para evitar
     // fallos si hay huecos) — es la referencia correcta para saber qué falta
     const maxStoredEpisode = await getMaxStoredEpisode(record.id_anime);
-    console.log(`syncAnimeById [${idAnime}]: max stored episode = ${maxStoredEpisode}`);
 
     try {
         if (apiEpisodeCount === 0) {
@@ -247,10 +245,6 @@ export async function syncAnimeById(idAnime) {
 
             if (episodeListInfo.total !== null || episodeListInfo.hasEpisodes) {
                 const verifiedEpisodeCount = episodeListInfo.total;
-                console.log(
-                    `syncAnimeById [${idAnime}]: API general view reports 0 episodes, ` +
-                    `episodes view reports ${verifiedEpisodeCount ?? 'unknown total'}`
-                );
                 apiEpisodeCount = verifiedEpisodeCount;
                 shouldProbeNextEpisodes = verifiedEpisodeCount === null;
             }
@@ -263,13 +257,11 @@ export async function syncAnimeById(idAnime) {
             (apiEpisodeCount !== null && apiEpisodeCount > maxStoredEpisode) ||
             (apiEpisodeCount === null && maxStoredEpisode === 0);
 
-        console.log(`syncAnimeById [${idAnime}]: needsSync = ${needsSync}`);
 
         if (needsSync) {
             let syncFromEpisode = maxStoredEpisode;
             if (firstMissingEpisode !== null && firstMissingEpisode <= maxStoredEpisode) {
                 syncFromEpisode = firstMissingEpisode - 1;
-                console.log(`syncAnimeById [${idAnime}]: filling gap from episode ${firstMissingEpisode}`);
             }
 
             // solo pedimos los números que nos faltan, empezando desde la página correcta;
@@ -291,7 +283,6 @@ export async function syncAnimeById(idAnime) {
                 );
             }
 
-            console.log(`syncAnimeById [${idAnime}]: new episode numbers =`, numbersToSync);
             if (numbersToSync.length) {
                 await upsertChapters(record.id_anime, numbersToSync, {
                     replaceExisting: false,
@@ -299,7 +290,6 @@ export async function syncAnimeById(idAnime) {
                     skipEpisodeDetailForNumbers
                 });
                 await touchAnimeLastUpdate(record.id_anime);
-                console.log(`syncAnimeById [${idAnime}]: chapters saved successfully`);
             }
         } else if (apiEpisodeCount !== null && apiEpisodeCount < maxStoredEpisode) {
             console.warn(
@@ -315,19 +305,12 @@ export async function syncAnimeById(idAnime) {
 
 // función principal de sincronización
 export async function syncAllAnime() {
-    console.log('Starting anime synchronization');
     let page = 1;
-    let pagesTotales = null;
 
     while (true) {
-        const t0 = Date.now();
         try {
             const data = await fetchAnimePage(page);
             if (!data || !data.data || data.data.length === 0) break;
-
-            if (pagesTotales === null && data.pagination?.last_visible_page) {
-                pagesTotales = data.pagination.last_visible_page;
-            }
 
             const concurrency = 2;
             for (let i = 0; i < data.data.length; i += concurrency) {
@@ -356,14 +339,6 @@ export async function syncAllAnime() {
                 await new Promise((r) => setTimeout(r, 2000));
             }
 
-            const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-            if (pagesTotales) {
-                const remainingSec = (pagesTotales - page) * Number(elapsed);
-                console.log(`page ${page} processed in ${elapsed}s; ~${(remainingSec / 60).toFixed(1)}m remaining`);
-            } else {
-                console.log(`page ${page} processed in ${elapsed}s`);
-            }
-
             if (!data.pagination.has_next_page) break;
             page += 1;
         } catch (err) {
@@ -371,7 +346,6 @@ export async function syncAllAnime() {
             break;
         }
     }
-    console.log('Anime synchronization finished');
 }
 
 export default syncAllAnime;

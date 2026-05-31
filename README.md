@@ -61,18 +61,17 @@ El script executa primer les proves i després inicia `src/server.js`.
 
 ## Estructura general
 
-- `server/src/server.js`: fitxer principal; configura Express, CORS, sessions, autenticació, correus, rutes de l'API i arrencada del servidor.
-- `server/src/app.js`: fitxer reservat per separar l'app Express, actualment sense lògica.
+- `server/src/server.js`: arrenca el servidor HTTP.
+- `server/src/app.js`: configura Express, CORS, sessions, autenticació, fitxers estàtics i rutes de l'API.
 - `server/src/config/db.js`: carrega `.env`, crea el client de Supabase i valida que existeixin `SUPABASE_URL` i `SUPABASE_KEY`.
 - `server/src/controllers/syncAnime.js`: sincronitza animes, gèneres i capítols des de Jikan cap a Supabase, amb control de rate limit i reintents.
 - `server/src/models`: capa d'accés a dades de Supabase.
 - `server/vercel.json`: configura el desplegament de `src/server.js` com a funció de Vercel.
 - `server/package.json` i `server/package-lock.json`: dependències, scripts i versions bloquejades.
-- `response.json`, `server/tmp.json` i `server/tmp2.json`: fitxers de resposta o proves temporals del projecte.
 
 ## Models de dades
 
-- `anime_model.js`: cerca, llista i actualitza animes; llista gèneres; insereix o actualitza gèneres; desa capítols; calcula capítols emmagatzemats o pendents; comprova la connexió amb Supabase.
+- `anime_model.js`: cerca, llista i actualitza animes; llista gèneres; insereix o actualitza gèneres; desa capítols i calcula capítols emmagatzemats o pendents.
 - `users_model.js`: registra usuaris, cerca per nom o email, actualitza foto, nom, email, contrasenya, anime preferit/recomanat i tokens de recuperació.
 - `favorites_model.js`: llegeix, afegeix, elimina i actualitza favorits i exposa favorits públics.
 - `comment_model.js`: llegeix, crea i elimina comentaris d'anime.
@@ -80,7 +79,6 @@ El script executa primer les proves i després inicia `src/server.js`.
 - `progress_model.js`: desa progrés de capítols vistos, calcula minuts vistos i estadístiques d'usuari.
 - `progress_stats.js`: helpers purs per sumar minuts, capítols i animes acabats.
 - `progress_stats.test.js`: proves unitàries de les funcions d'estadístiques.
-- `model.js`: fitxer base o auxiliar per consultes compartides.
 
 ## Controladors i sincronització
 
@@ -95,10 +93,9 @@ El codi limita les peticions a Jikan, reintenta quan rep `429`, evita peticions 
 
 ## API principal
 
-### Salut, debug i catàleg
+### Salut i catàleg
 
-- `GET /test-db`: comprova la connexió amb Supabase.
-- `GET /api/debug-session`: mostra informació de cookies i sessió per depurar.
+- `GET /health`: retorna l'estat bàsic del servidor.
 - `GET /api/anime`: llista animes amb paginació opcional i filtre de gènere.
 - `GET /api/genres`: retorna els gèneres disponibles.
 - `GET /api/anime/recent/:limit`: retorna animes recents.

@@ -107,13 +107,6 @@ export async function getFirstMissingEpisode(id_anime, episodeCount) {
     return null;
 }
 
-export async function testDbConnection() {
-    return await supabase
-        .from('anime')
-        .select('*')
-        .limit(1);
-}
-
 export async function listGenres() {
     const { data, error } = await supabase
         .from('genere')
@@ -332,17 +325,11 @@ export async function upsertChapters(id_anime, episodeNumbers = [], options = { 
         }
 
         if (episodeNumbers.length === 0) {
-            console.log(`upsertChapters [${id_anime}]: no hay episodios nuevos`);
             return;
         }
 
         // los números ya vienen ordenados de forma ascendente desde fetchNewEpisodeNumbers,
         // así que empezamos exactamente por el primero que falta
-        console.log(
-            `upsertChapters [${id_anime}]: ${episodeNumbers.length} episodios nuevos` +
-            ` a partir del ${episodeNumbers[0]}`
-        );
-
         for (const num of episodeNumbers) {
             let title = '';
             let duration = null;
@@ -384,12 +371,9 @@ export async function upsertChapters(id_anime, episodeNumbers = [], options = { 
                 numero: num,
                 duracio_minuts: duration || null,
             };
-            console.log(`upsertChapters: inserting episode ${num} for anime ${id_anime}`, rec);
             const { error } = await supabase.from('capitol').upsert(rec, { onConflict: 'id_capitol' });
             if (error) {
                 console.error('upsert chapter error', error, 'num:', num);
-            } else {
-                console.log(`upsertChapters: episode ${num} saved successfully`);
             }
         }
     } catch (err) {

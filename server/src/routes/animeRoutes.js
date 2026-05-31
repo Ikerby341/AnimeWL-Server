@@ -90,7 +90,6 @@ export function createAnimeRouter() {
 
 		try {
 			data = await fetchJikanSearch(trimmedQuery);
-			console.log('/api/jikan/search jikan', trimmedQuery, 'results', data.length);
 			if (data.length > 0) {
 				return res.json({ success: true, data });
 			}
@@ -101,7 +100,6 @@ export function createAnimeRouter() {
 
 		data = await fetchAnimeFromDb(trimmedQuery);
 		if (data.length > 0) {
-			console.log('/api/jikan/search db fallback', trimmedQuery, 'results', data.length);
 			return res.json({ success: true, data });
 		}
 
@@ -121,9 +119,7 @@ export function createAnimeRouter() {
 		const { id } = req.params;
 		const cacheOnly = req.query.cacheOnly === 'true';
 		try {
-			console.log('GET /api/anime/:id', id, 'cacheOnly=', cacheOnly);
 			let anime = await findAnimeById(id);
-			console.log('  initial db read:', !!anime);
 			if (anime) {
 				anime = await findAnimeById(id);
 				res.json({ success: true, anime });
@@ -134,14 +130,12 @@ export function createAnimeRouter() {
 			}
 
 			if (cacheOnly) {
-				console.log('  cacheOnly requested and anime not in DB. returning 404 without sync.');
 				return res.status(404).json({ success: false, error: 'not found' });
 			}
 
 			let rec;
 			try {
 				rec = await syncAnimeMetadataById(id);
-				console.log('  metadata sync rec:', rec && rec.id_anime);
 			} catch (error) {
 				console.error('metadata sync error', error);
 				try {
@@ -154,13 +148,10 @@ export function createAnimeRouter() {
 				}
 			}
 			anime = await findAnimeById(id);
-			console.log('  post-sync db read:', !!anime);
 			if (!anime && rec) {
-				console.log('  using rec fallback');
 				anime = rec;
 			}
 			if (!anime) {
-				console.log('  final result: not found');
 				return res.status(404).json({
 					success: false,
 					error: 'not found'

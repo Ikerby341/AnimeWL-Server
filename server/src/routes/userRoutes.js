@@ -84,7 +84,6 @@ async function getPublicProfile(userId) {
 async function ensureAnimeExists(idAnime) {
 	let anime = await findAnimeById(idAnime);
 	if (!anime) {
-		console.log(`Anime ${idAnime} no encontrado en BBDD, sincronizando antes de usarlo.`);
 		await syncAnimeMetadataById(idAnime);
 		anime = await findAnimeById(idAnime);
 	}

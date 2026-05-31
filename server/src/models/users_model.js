@@ -9,7 +9,6 @@ export async function registerUser({ id_usuari, nom, email, contrasenya }) {
     }
     if (result.data) {
         const message = 'Ese nombre de usuario ya está registrado.';
-        console.log(message, nom);
         return { data: null, error: new Error(message) };
     }
 
@@ -21,7 +20,6 @@ export async function registerUser({ id_usuari, nom, email, contrasenya }) {
     }
     if (result.data) {
         const message = 'Ese email ya está registrado.';
-        console.log(message, email);
         return { data: null, error: new Error(message) };
     }
 

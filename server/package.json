@@ -15,15 +15,19 @@
   },
   "name": "server",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "API backend d'AnimeWL",
+  "main": "src/server.js",
   "scripts": {
     "start": "npm run test && node src/server.js",
     "dev": "npm run test && node src/server.js",
     "test": "node --test src/**/*.test.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "animewl",
+    "express",
+    "supabase"
+  ],
+  "author": "AnimeWL",
   "license": "ISC",
   "type": "module"
 }
