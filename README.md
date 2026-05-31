@@ -71,7 +71,7 @@ El script executa primer les proves i després inicia `src/server.js`.
 
 ## Models de dades
 
-- `anime_model.js`: cerca, llista i actualitza animes; llista gèneres; insereix o actualitza gèneres; desa capítols i calcula capítols emmagatzemats o pendents.
+- `anime_model.js`: cerca, llista i actualitza animes; llista gèneres; llista animes en emissió; insereix o actualitza gèneres; desa capítols i calcula capítols emmagatzemats o pendents.
 - `users_model.js`: registra usuaris, cerca per nom o email, actualitza foto, nom, email, contrasenya, anime preferit/recomanat i tokens de recuperació.
 - `favorites_model.js`: llegeix, afegeix, elimina i actualitza favorits i exposa favorits públics.
 - `comment_model.js`: llegeix, crea i elimina comentaris d'anime.
@@ -99,6 +99,7 @@ El codi limita les peticions a Jikan, reintenta quan rep `429`, evita peticions 
 - `GET /api/anime`: llista animes amb paginació opcional i filtre de gènere.
 - `GET /api/genres`: retorna els gèneres disponibles.
 - `GET /api/anime/recent/:limit`: retorna animes recents.
+- `GET /api/anime/airing/:limit`: retorna animes que estan en emissió.
 - `GET /api/anime/genre/:genreId`: retorna animes d'un gènere.
 - `GET /api/anime/genre/:genreId/:limit`: retorna animes d'un gènere amb límit.
 - `GET /api/anime/:id`: retorna un anime; si existeix a la base de dades respon ràpid i sincronitza en segon pla.

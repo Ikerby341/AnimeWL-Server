@@ -2,7 +2,7 @@ import { Router } from 'express';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { syncAnimeById, syncAnimeMetadataById, mapJikanToDb } from '../controllers/syncAnime.js';
-import { findAnimeById, listAnimes, getEpisodeCountByAnime, listGenres } from '../models/anime_model.js';
+import { findAnimeById, listAiringAnimes, listAnimes, getEpisodeCountByAnime, listGenres } from '../models/anime_model.js';
 import { findCommentsByAnimeId, insertComment, deleteCommentById } from '../models/comment_model.js';
 import { findRatingSummaryByAnimeId, findRatingByAnimeAndUser, saveRating } from '../models/rating_model.js';
 import { findProgressByAnimeAndUser, saveProgress, calculateWatchedMinutesForAnime } from '../models/progress_model.js';
@@ -52,6 +52,17 @@ export function createAnimeRouter() {
 			res.json({ success: true, anime });
 		} catch (err) {
 			console.error('GET /api/anime/recent/:limit error', err);
+			res.status(500).json({ success: false, error: err.message });
+		}
+	});
+
+	router.get('/api/anime/airing/:limit', async (req, res) => {
+		const { limit } = req.params;
+		try {
+			const anime = await listAiringAnimes(limit);
+			res.json({ success: true, anime });
+		} catch (err) {
+			console.error('GET /api/anime/airing/:limit error', err);
 			res.status(500).json({ success: false, error: err.message });
 		}
 	});

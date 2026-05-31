@@ -382,6 +382,41 @@ export async function upsertChapters(id_anime, episodeNumbers = [], options = { 
 }
 
 // retornar la lista completa de animes (sin paginar), incluyendo recuento de capítulos
+async function attachEpisodeCounts(animes) {
+    for (let i = 0; i < animes.length; i += 8) {
+        const chunk = animes.slice(i, i + 8);
+        await Promise.all(
+            chunk.map(async (anime) => {
+                anime.episodeCount = await getEpisodeCountByAnime(anime.id_anime);
+            })
+        );
+    }
+
+    return animes;
+}
+
+export async function listAiringAnimes(limit = 7) {
+    const numericLimit = Number(limit);
+    let query = supabase
+        .from('anime')
+        .select('*')
+        .eq('estat', 'Currently Airing')
+        .order('lastupdate', { ascending: false });
+
+    if (Number.isFinite(numericLimit) && numericLimit > 0) {
+        query = query.limit(numericLimit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('listAiringAnimes error', error);
+        throw error;
+    }
+
+    return attachEpisodeCounts(data || []);
+}
+
 export async function listAnimes(genre = null, limit = null, offset = 0) {
     const numericLimit = Number(limit);
     const numericOffset = Number(offset);
@@ -410,15 +445,5 @@ export async function listAnimes(genre = null, limit = null, offset = 0) {
         throw error;
     }
 
-    const animes = animeData || [];
-
-    for (let i = 0; i < animes.length; i += 8) {
-        const chunk = animes.slice(i, i + 8);
-        await Promise.all(
-            chunk.map(async (anime) => {
-                anime.episodeCount = await getEpisodeCountByAnime(anime.id_anime);
-            })
-        );
-    }
-    return animes;
+    return attachEpisodeCounts(animeData || []);
 }
