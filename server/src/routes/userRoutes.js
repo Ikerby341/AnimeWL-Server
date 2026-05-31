@@ -7,11 +7,14 @@ import { getUserStats } from '../models/progress_model.js';
 import { findFavoritesByUser, addFavorite, removeFavorite, updateFavoriteStatus, findPublicFavoritesByUser } from '../models/favorites_model.js';
 import {
 	registerUser,
+	findUserById,
 	findUserByNom,
 	findUserByEmail,
+	listUsersForAdmin,
 	updateUserProfilePicture,
 	updateUserAnimeChoice,
 	updateUsername,
+	updateUserAdminRole,
 	updateUserPassword,
 	updateUserEmail,
 	updateResetPasswordToken,
@@ -28,7 +31,7 @@ import {
 	isSameAuthenticatedUser,
 	validateEmail
 } from '../utils/auth.js';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
+import { sendAdminUsernameChangedEmail, sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
 
 async function enrichFavoritesWithAnime(favorites) {
 	return Promise.all(
@@ -98,8 +101,51 @@ function updateSessionUser(req, user) {
 		email: user.email,
 		id_anime_preferit: user.id_anime_preferit,
 		id_anime_recomanat: user.id_anime_recomanat,
-		img_url: user.img_url
+		img_url: user.img_url,
+		isAdmin: Boolean(user.isAdmin)
 	};
+}
+
+async function findSessionUser(sessionUser) {
+	const userId = getUserId(sessionUser);
+
+	if (userId) {
+		const result = await findUserById(userId);
+		if (!result.error && result.data) {
+			return result;
+		}
+		if (result.error) {
+			return result;
+		}
+	}
+
+	if (sessionUser?.nom) {
+		return findUserByNom(sessionUser.nom);
+	}
+
+	return { data: null, error: null };
+}
+
+async function requireAdmin(req, res) {
+	if (!req.session.user) {
+		res.status(401).json({ success: false, error: 'No hay sesión activa' });
+		return null;
+	}
+
+	const result = await findSessionUser(req.session.user);
+	if (result.error) {
+		console.error('Error checking admin session:', result.error);
+		res.status(500).json({ success: false, error: 'Error al comprobar permisos de administrador.' });
+		return null;
+	}
+
+	if (!result.data || result.data.isAdmin !== true) {
+		res.status(403).json({ success: false, error: 'No tienes permisos de administrador.' });
+		return null;
+	}
+
+	updateSessionUser(req, result.data);
+	return result.data;
 }
 
 export function createUserRouter() {
@@ -179,6 +225,111 @@ export function createUserRouter() {
 		'/api/users/:userId/favorites/public',
 		'/api/profile/:userId/favorites'
 	], handlePublicFavoritesRequest);
+
+	router.get('/api/admin/users', async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		try {
+			const { data, error } = await listUsersForAdmin();
+			if (error) {
+				console.error('GET /api/admin/users error:', error);
+				return res.status(500).json({ success: false, error: 'Error al cargar usuarios.' });
+			}
+
+			return res.json({ success: true, users: data || [] });
+		} catch (err) {
+			console.error('GET /api/admin/users error:', err);
+			return res.status(500).json({ success: false, error: err.message });
+		}
+	});
+
+	router.patch('/api/admin/users/:userId', async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const { userId } = req.params;
+		const { nom, isAdmin } = req.body;
+
+		if (!userId) {
+			return res.status(400).json({ success: false, error: 'Falta el id del usuario.' });
+		}
+
+		if (nom !== undefined && (typeof nom !== 'string' || nom.trim() === '')) {
+			return res.status(400).json({ success: false, error: 'El nombre de usuario no puede estar vacio.' });
+		}
+
+		if (nom !== undefined && nom.trim().length > 30) {
+			return res.status(400).json({ success: false, error: 'El nombre de usuario no puede superar 30 caracteres.' });
+		}
+
+		if (isAdmin !== undefined && typeof isAdmin !== 'boolean') {
+			return res.status(400).json({ success: false, error: 'El rol de administrador debe ser booleano.' });
+		}
+
+		try {
+			const currentUser = await findUserById(userId);
+			if (currentUser.error) {
+				console.error('Admin user lookup error:', currentUser.error);
+				return res.status(500).json({ success: false, error: 'Error al buscar el usuario.' });
+			}
+
+			if (!currentUser.data) {
+				return res.status(404).json({ success: false, error: 'Usuario no encontrado.' });
+			}
+
+			let updatedUser = currentUser.data;
+			let emailWarning = null;
+			const trimmedUsername = nom?.trim();
+			const usernameChanged = trimmedUsername !== undefined && trimmedUsername !== currentUser.data.nom;
+
+			if (usernameChanged) {
+				const { data, error } = await updateUsername(userId, trimmedUsername);
+				if (error) {
+					const errorMessage = error.message || 'Error al actualizar el nombre de usuario.';
+					const statusCode = errorMessage.includes('registrado') ? 400 : 500;
+					return res.status(statusCode).json({ success: false, error: errorMessage });
+				}
+				updatedUser = data || { ...updatedUser, nom: trimmedUsername };
+			}
+
+			if (isAdmin !== undefined && isAdmin !== Boolean(updatedUser.isAdmin)) {
+				const { data, error } = await updateUserAdminRole(userId, isAdmin);
+				if (error) {
+					console.error('Admin role update error:', error);
+					return res.status(500).json({ success: false, error: 'Error al actualizar el rol del usuario.' });
+				}
+				updatedUser = data || { ...updatedUser, isAdmin };
+			}
+
+			if (usernameChanged) {
+				try {
+					await sendAdminUsernameChangedEmail(updatedUser.email || currentUser.data.email, updatedUser.nom);
+				} catch (emailError) {
+					console.error('Admin username change email error:', emailError);
+					emailWarning = 'Usuario actualizado, pero no se pudo enviar el correo informativo.';
+				}
+			}
+
+			if (String(userId) === String(getUserId(req.session.user))) {
+				updateSessionUser(req, updatedUser);
+			}
+
+			return res.json({
+				success: true,
+				user: {
+					id_usuari: updatedUser.id_usuari,
+					nom: updatedUser.nom,
+					email: updatedUser.email,
+					isAdmin: Boolean(updatedUser.isAdmin)
+				},
+				warning: emailWarning
+			});
+		} catch (err) {
+			console.error('PATCH /api/admin/users/:userId error:', err);
+			return res.status(500).json({ success: false, error: err.message });
+		}
+	});
 
 	router.get('/api/user/:userId/favorites', async (req, res) => {
 		const { userId } = req.params;
@@ -368,7 +519,7 @@ export function createUserRouter() {
 			return res.status(400).json({ success: false, error: 'La nueva contraseÃ±a debe tener al menos 6 caracteres.' });
 		}
 		try {
-			const result = await findUserByNom(req.session.user.nom);
+			const result = await findSessionUser(req.session.user);
 			if (result.error) {
 				console.error('Error fetching session user info:', result.error);
 				return res.status(500).json({ success: false, error: 'Error al comprobar la sesiÃ³n.' });
@@ -543,7 +694,8 @@ export function createUserRouter() {
 			email: result.data.email,
 			id_anime_preferit: result.data.id_anime_preferit,
 			id_anime_recomanat: result.data.id_anime_recomanat,
-			img_url: result.data.img_url
+			img_url: result.data.img_url,
+			isAdmin: Boolean(result.data.isAdmin)
 		};
 
 		return res.json({
@@ -558,9 +710,23 @@ export function createUserRouter() {
 				return res.json({ success: true, user: null });
 			}
 
+			const refreshedUser = await findSessionUser(req.session.user);
+			if (refreshedUser.error) {
+				console.error('Error fetching user session info:', refreshedUser.error);
+				return res.status(500).json({ success: false, error: 'Error al comprobar la sesion' });
+			}
+
+			if (refreshedUser.data) {
+				updateSessionUser(req, refreshedUser.data);
+				return res.json({ success: true, user: req.session.user });
+			}
+
+			req.session = null;
+			return res.json({ success: true, user: null });
+
 			const sessionUser = req.session.user;
 
-			if (sessionUser.id_anime_preferit == null || sessionUser.id_anime_recomanat == null || sessionUser.img_url == null) {
+			if (sessionUser.id_anime_preferit == null || sessionUser.id_anime_recomanat == null || sessionUser.img_url == null || sessionUser.isAdmin == null) {
 				const result = await findUserByNom(sessionUser.nom);
 				if (result.error) {
 					console.error('Error fetching user session info:', result.error);
@@ -574,7 +740,8 @@ export function createUserRouter() {
 						email: result.data.email,
 						id_anime_preferit: result.data.id_anime_preferit,
 						id_anime_recomanat: result.data.id_anime_recomanat,
-						img_url: result.data.img_url
+						img_url: result.data.img_url,
+						isAdmin: Boolean(result.data.isAdmin)
 					};
 					return res.json({ success: true, user: req.session.user });
 				}
@@ -592,7 +759,7 @@ export function createUserRouter() {
 			return res.status(401).json({ success: false, error: 'No hay sesiÃ³n activa' });
 		}
 		try {
-			const result = await findUserByNom(req.session.user.nom);
+			const result = await findSessionUser(req.session.user);
 			if (result.error) {
 				console.error('Error fetching session user info:', result.error);
 				return res.status(500).json({ success: false, error: 'Error al comprobar la sesiÃ³n' });
@@ -604,7 +771,8 @@ export function createUserRouter() {
 					email: result.data.email,
 					id_anime_preferit: result.data.id_anime_preferit,
 					id_anime_recomanat: result.data.id_anime_recomanat,
-					img_url: result.data.img_url
+					img_url: result.data.img_url,
+					isAdmin: Boolean(result.data.isAdmin)
 				};
 				return res.json({ success: true, user: req.session.user });
 			}

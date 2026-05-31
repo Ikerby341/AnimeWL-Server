@@ -6,7 +6,9 @@ import { findAnimeById, listAiringAnimes, listAnimes, getEpisodeCountByAnime, li
 import { findCommentsByAnimeId, insertComment, deleteCommentById } from '../models/comment_model.js';
 import { findRatingSummaryByAnimeId, findRatingByAnimeAndUser, saveRating } from '../models/rating_model.js';
 import { findProgressByAnimeAndUser, saveProgress, calculateWatchedMinutesForAnime } from '../models/progress_model.js';
+import { findUserById } from '../models/users_model.js';
 import { fetchAnimeFromDb, fetchJikanSearch } from '../services/jikanService.js';
+import { getUserId } from '../utils/auth.js';
 
 const COMMENT_MAX_LENGTH = 255;
 
@@ -193,7 +195,19 @@ export function createAnimeRouter() {
 			return res.status(401).json({ success: false, error: 'No hay sesiÃ³n activa' });
 		}
 		try {
-			const deleted = await deleteCommentById(commentId, req.session.user.id_usuari);
+			const userId = getUserId(req.session.user);
+			if (!userId) {
+				return res.status(401).json({ success: false, error: 'No hay sesión activa' });
+			}
+
+			const currentUser = await findUserById(userId);
+			if (currentUser.error) {
+				console.error('Error checking comment delete permissions:', currentUser.error);
+				return res.status(500).json({ success: false, error: 'Error al comprobar permisos.' });
+			}
+
+			const isAdmin = currentUser.data?.isAdmin === true;
+			const deleted = await deleteCommentById(commentId, userId, isAdmin);
 			if (!deleted) {
 				return res.status(404).json({ success: false, error: 'Comentario no encontrado' });
 			}

@@ -106,6 +106,15 @@ function renderAnimeWlEmail({ title, intro, bodyHtml, buttonLabel = null, button
 	`;
 }
 
+function escapeHtml(value) {
+	return String(value)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
 export async function sendVerificationEmail(to, code) {
 	const intro = 'Has solicitado verificar tu identidad para cambiar el correo electronico asociado a tu cuenta.';
 	const bodyHtml = `
@@ -124,6 +133,30 @@ export async function sendVerificationEmail(to, code) {
 			intro,
 			bodyHtml,
 			footer: 'Si no has solicitado este cambio, puedes ignorar este correo sin hacer nada.'
+		})
+	});
+}
+
+export async function sendAdminUsernameChangedEmail(to, newUsername) {
+	const safeUsername = escapeHtml(newUsername);
+	const intro = 'Un administrador ha cambiado el nombre de usuario asociado a tu cuenta de AnimeWL.';
+	const bodyHtml = `
+		<p style="margin:0 0 12px;font-size:15px;line-height:1.7;color:#f3f3f3;">Tu nuevo nombre de usuario es:</p>
+		<div style="display:inline-block;margin:8px 0 4px;padding:14px 20px;border-radius:14px;background-color:#000000;border:1px solid #2a2a2a;color:#18c443;font-size:26px;font-weight:800;">
+			${safeUsername}
+		</div>
+		<p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#b0b0b0;">A partir de ahora deberás usar este nombre para iniciar sesión.</p>
+	`;
+
+	return dispatchAppEmail({
+		to,
+		subject: 'Tu nombre de usuario de AnimeWL ha cambiado',
+		text: `Un administrador ha cambiado tu nombre de usuario. Tu nuevo nombre de usuario es: ${newUsername}`,
+		html: renderAnimeWlEmail({
+			title: 'Nombre de usuario actualizado',
+			intro,
+			bodyHtml,
+			footer: 'Si no esperabas este cambio, contacta con el soporte de AnimeWL.'
 		})
 	});
 }

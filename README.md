@@ -139,6 +139,8 @@ El codi limita les peticions a Jikan, reintenta quan rep `429`, evita peticions 
 - `POST /api/user/update-password`: canvia la contrasenya amb validació de la contrasenya actual.
 - `POST /api/user/send-email-code`: envia un codi per confirmar canvi d'email.
 - `POST /api/user/update-email`: valida el codi i actualitza l'email.
+- `GET /api/admin/users`: llista usuaris per a administradors.
+- `PATCH /api/admin/users/:userId`: permet a un administrador canviar el rol i el nom d'usuari, enviant un correu informatiu si el nom canvia.
 
 ### Recuperació de contrasenya
 

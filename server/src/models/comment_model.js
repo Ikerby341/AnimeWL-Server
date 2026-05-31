@@ -50,12 +50,17 @@ export async function insertComment(comment) {
     };
 }
 
-export async function deleteCommentById(id_comentari, id_usuari) {
-    const { data, error } = await supabase
+export async function deleteCommentById(id_comentari, id_usuari, isAdmin = false) {
+    let query = supabase
         .from('comentari')
         .delete()
-        .eq('id_comentari', id_comentari)
-        .eq('id_usuari', id_usuari)
+        .eq('id_comentari', id_comentari);
+
+    if (!isAdmin) {
+        query = query.eq('id_usuari', id_usuari);
+    }
+
+    const { data, error } = await query
         .select('id_comentari')
         .maybeSingle();
 

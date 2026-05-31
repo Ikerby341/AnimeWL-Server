@@ -31,7 +31,8 @@ export async function registerUser({ id_usuari, nom, email, contrasenya }) {
             contrasenya,
             id_anime_preferit: null,
             id_anime_recomanat: null,
-            img_url: null
+            img_url: null,
+            isAdmin: false
         }
     ]);
 
@@ -45,7 +46,7 @@ export async function registerUser({ id_usuari, nom, email, contrasenya }) {
 export async function findUserByNom(nom) {
     return await supabase
         .from('usuari')
-        .select('id_usuari, nom, email, contrasenya, id_anime_preferit, id_anime_recomanat, img_url')
+        .select('id_usuari, nom, email, contrasenya, id_anime_preferit, id_anime_recomanat, img_url, isAdmin')
         .eq('nom', nom)
         .maybeSingle();
 }
@@ -53,9 +54,24 @@ export async function findUserByNom(nom) {
 export async function findUserByEmail(email) {
     return await supabase
         .from('usuari')
-        .select('id_usuari, nom, email, contrasenya, id_anime_preferit, id_anime_recomanat, img_url')
+        .select('id_usuari, nom, email, contrasenya, id_anime_preferit, id_anime_recomanat, img_url, isAdmin')
         .eq('email', email)
         .maybeSingle();
+}
+
+export async function findUserById(id_usuari) {
+    return await supabase
+        .from('usuari')
+        .select('id_usuari, nom, email, contrasenya, id_anime_preferit, id_anime_recomanat, img_url, isAdmin')
+        .eq('id_usuari', id_usuari)
+        .maybeSingle();
+}
+
+export async function listUsersForAdmin() {
+    return await supabase
+        .from('usuari')
+        .select('id_usuari, nom, email, isAdmin')
+        .order('nom', { ascending: true });
 }
 
 export async function updateUserProfilePicture(id_usuari, img_url) {
@@ -111,6 +127,15 @@ export async function updateUsername(id_usuari, newUsername) {
         return { data: null, error: error };
     }
     return { data, error };
+}
+
+export async function updateUserAdminRole(id_usuari, isAdmin) {
+    return await supabase
+        .from('usuari')
+        .update({ isAdmin })
+        .eq('id_usuari', id_usuari)
+        .select('id_usuari, nom, email, id_anime_preferit, id_anime_recomanat, img_url, isAdmin')
+        .maybeSingle();
 }
 
 export async function updateUserEmail(id_usuari, newEmail) {
