@@ -77,6 +77,7 @@ El script executa primer les proves i després inicia `src/server.js`.
 - `comment_model.js`: llegeix, crea i elimina comentaris d'anime.
 - `rating_model.js`: desa puntuacions i calcula resum de valoracions per anime.
 - `progress_model.js`: desa progrés de capítols vistos, calcula minuts vistos i estadístiques d'usuari.
+- `animedle_model.js`: genera el repte diari d'Animedle, desa intents per usuari i cerca suggeriments de títols.
 - `progress_stats.js`: helpers purs per sumar minuts, capítols i animes acabats.
 - `progress_stats.test.js`: proves unitàries de les funcions d'estadístiques.
 
@@ -105,6 +106,12 @@ El codi limita les peticions a Jikan, reintenta quan rep `429`, evita peticions 
 - `GET /api/anime/:id`: retorna un anime; si existeix a la base de dades respon ràpid i sincronitza en segon pla.
 - `POST /api/anime/sync/:id`: força la sincronització d'un anime.
 - `GET /api/jikan/search?q=`: cerca a Jikan i fa fallback a la base de dades local.
+
+### Animedle
+
+- `GET /api/animedle`: retorna el repte diari, el progrés de l'usuari i l'anime del dia anterior.
+- `GET /api/animedle/suggestions?q=`: retorna suggeriments de títols d'anime sense imatge.
+- `POST /api/animedle/guess`: registra un intent i bloqueja el repte quan s'encerta o s'esgoten els intents.
 
 ### Comentaris, valoracions i progrés
 

@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieSession from 'cookie-session';
 import { authTokenSession } from './middleware/authTokenSession.js';
+import { createAnimedleRouter } from './routes/animedleRoutes.js';
 import { createAnimeRouter } from './routes/animeRoutes.js';
 import { createSystemRouter } from './routes/systemRoutes.js';
 import { createUserRouter } from './routes/userRoutes.js';
@@ -43,6 +44,7 @@ export function createApp() {
 	app.set('view engine', 'ejs');
 
 	app.use(createSystemRouter());
+	app.use(createAnimedleRouter());
 	app.use(createAnimeRouter());
 	app.use(createUserRouter());
 
