@@ -417,6 +417,70 @@ export async function listAiringAnimes(limit = 7) {
     return attachEpisodeCounts(data || []);
 }
 
+function shuffleItems(items) {
+    const shuffled = [...items];
+    for (let index = shuffled.length - 1; index > 0; index--) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+    }
+    return shuffled;
+}
+
+export async function listRandomUserRecommendedAnimes(limit = 5) {
+    const numericLimit = Number(limit);
+    const resultLimit = Number.isFinite(numericLimit) && numericLimit > 0 ? numericLimit : 5;
+
+    const { data: recommendationRows, error: recommendationError } = await supabase
+        .from('usuari')
+        .select('id_anime_recomanat')
+        .not('id_anime_recomanat', 'is', null);
+
+    if (recommendationError) {
+        console.error('listRandomUserRecommendedAnimes recommendations error', recommendationError);
+        throw recommendationError;
+    }
+
+    const recommendedIds = shuffleItems([
+        ...new Set((recommendationRows || [])
+            .map((row) => row.id_anime_recomanat)
+            .filter(Boolean)
+            .map((id) => String(id)))
+    ]).slice(0, resultLimit);
+
+    let selectedAnimes = [];
+    if (recommendedIds.length > 0) {
+        const { data: recommendedAnimes, error: animeError } = await supabase
+            .from('anime')
+            .select('*')
+            .in('id_anime', recommendedIds);
+
+        if (animeError) {
+            console.error('listRandomUserRecommendedAnimes anime error', animeError);
+            throw animeError;
+        }
+
+        const animeById = new Map((recommendedAnimes || []).map((anime) => [String(anime.id_anime), anime]));
+        selectedAnimes = recommendedIds
+            .map((id) => animeById.get(id))
+            .filter(Boolean);
+    }
+
+    const selectedIds = new Set(selectedAnimes.map((anime) => String(anime.id_anime)));
+    if (selectedAnimes.length < resultLimit) {
+        const recentAnimes = await listAnimes(null, resultLimit * 3);
+        for (const anime of recentAnimes) {
+            const animeId = String(anime.id_anime);
+            if (!selectedIds.has(animeId)) {
+                selectedAnimes.push(anime);
+                selectedIds.add(animeId);
+            }
+            if (selectedAnimes.length >= resultLimit) break;
+        }
+    }
+
+    return attachEpisodeCounts(selectedAnimes.slice(0, resultLimit));
+}
+
 export async function listAnimes(genre = null, limit = null, offset = 0) {
     const numericLimit = Number(limit);
     const numericOffset = Number(offset);
