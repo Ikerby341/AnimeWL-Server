@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { upsertAnime, upsertAnimeGenres, upsertChapters, touchAnimeLastUpdate, hasUsableEpisodeDetail, getMaxStoredEpisode, getFirstMissingEpisode } from '../models/anime_model.js';
+import { findAnimeById, upsertAnime, upsertAnimeGenres, upsertChapters, touchAnimeLastUpdate, hasUsableEpisodeDetail, getMaxStoredEpisode, getFirstMissingEpisode } from '../models/anime_model.js';
 
 let lastJikanRequestAt = 0;
 
@@ -44,6 +44,79 @@ export function mapJikanToDb(anime) {
         lastupdate: anime.updated_at || new Date().toISOString(),
         genres: anime.genres ? anime.genres.map((g) => g.name) : [],
     };
+}
+
+function normalizeText(value = '') {
+    return value
+        .toString()
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+}
+
+function looksLikeEnglishSynopsis(value = '') {
+    const text = normalizeText(value);
+    if (!text) return false;
+
+    const englishMatches = text.match(/\b(the|and|with|that|this|from|into|their|they|when|where|who|one|has|have|after|before|world|life|story)\b/g) || [];
+    const spanishMatches = text.match(/\b(el|la|los|las|un|una|unos|unas|que|con|para|por|del|esta|este|cuando|donde|historia|vida|mundo)\b/g) || [];
+    return englishMatches.length >= 3 && englishMatches.length > spanishMatches.length;
+}
+
+function shouldTranslateSynopsis(existingSynopsis, sourceSynopsis) {
+    if (!sourceSynopsis) return false;
+    if (!existingSynopsis) return true;
+    if (normalizeText(existingSynopsis) === normalizeText(sourceSynopsis)) return true;
+    return looksLikeEnglishSynopsis(existingSynopsis);
+}
+
+async function translateText(text, source = 'en', target = 'es') {
+    if (!text) return '';
+    const maxLen = 500;
+    let translated = '';
+
+    for (let index = 0; index < text.length; index += maxLen) {
+        const chunk = text.slice(index, index + maxLen);
+        try {
+            const response = await axios.get('https://api.mymemory.translated.net/get', {
+                params: {
+                    q: chunk,
+                    langpair: `${source}|${target}`
+                },
+                timeout: 15000
+            });
+            translated += response.data?.responseData?.translatedText || chunk;
+        } catch (err) {
+            console.error('translateText error', err.message);
+            translated += chunk;
+        }
+    }
+
+    return translated;
+}
+
+async function buildAnimeRecord(anime) {
+    const record = mapJikanToDb(anime);
+    const sourceSynopsis = anime.synopsis || '';
+
+    if (!sourceSynopsis) {
+        return record;
+    }
+
+    let existing = null;
+    try {
+        existing = await findAnimeById(record.id_anime);
+    } catch (err) {
+        console.error('buildAnimeRecord existing anime error', err.message);
+    }
+
+    if (shouldTranslateSynopsis(existing?.sinopsi, sourceSynopsis)) {
+        record.sinopsi = await translateText(sourceSynopsis);
+    } else {
+        record.sinopsi = existing.sinopsi;
+    }
+
+    return record;
 }
 
 async function fetchJikanJson(url) {
@@ -195,7 +268,7 @@ export async function syncAnimeMetadataById(idAnime) {
     const data = json?.data;
     if (!data) return null;
 
-    const record = mapJikanToDb(data);
+    const record = await buildAnimeRecord(data);
     await upsertAnime(record);
     if (record.genres && record.genres.length > 0) {
         await upsertAnimeGenres(record.id_anime, record.genres);
@@ -211,7 +284,7 @@ export async function syncAnimeById(idAnime) {
     const data = json?.data;
     if (!data) return null;
 
-    const record = mapJikanToDb(data);
+    const record = await buildAnimeRecord(data);
     await upsertAnime(record);
     if (record.genres && record.genres.length > 0) {
         await upsertAnimeGenres(record.id_anime, record.genres);
@@ -317,7 +390,7 @@ export async function syncAllAnime() {
                 const chunk = data.data.slice(i, i + concurrency);
                 await Promise.all(
                     chunk.map(async (anime) => {
-                        const record = mapJikanToDb(anime);
+                        const record = await buildAnimeRecord(anime);
                         await upsertAnime(record);
 
                         if (record.genres && record.genres.length > 0) {
