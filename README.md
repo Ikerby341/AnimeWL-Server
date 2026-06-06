@@ -97,7 +97,7 @@ El codi limita les peticions a Jikan, reintenta quan rep `429`, evita peticions 
 ### Salut i catàleg
 
 - `GET /health`: retorna l'estat bàsic del servidor.
-- `GET /api/anime`: llista animes amb paginació opcional i filtre de gènere.
+- `GET /api/anime`: llista animes amb paginació opcional i filtres de gènere i valoració (`genre`, `minRating`, `maxRating`).
 - `GET /api/genres`: retorna els gèneres disponibles.
 - `GET /api/anime/recent/:limit`: retorna animes recents.
 - `GET /api/anime/airing/:limit`: retorna animes que estan en emissió.

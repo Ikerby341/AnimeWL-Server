@@ -20,9 +20,14 @@ export function createAnimeRouter() {
 			const limit = Number(req.query.limit);
 			const offset = Number(req.query.offset || 0);
 			const genre = typeof req.query.genre === 'string' && req.query.genre.trim() !== '' ? req.query.genre.trim() : null;
+			const minRating = Number(req.query.minRating);
+			const maxRating = Number(req.query.maxRating);
 			const hasPagination = Number.isFinite(limit) && limit > 0;
 			const fetchLimit = hasPagination ? limit + 1 : null;
-			const anime = await listAnimes(genre, fetchLimit, offset);
+			const anime = await listAnimes(genre, fetchLimit, offset, {
+				minRating: Number.isFinite(minRating) ? minRating : null,
+				maxRating: Number.isFinite(maxRating) ? maxRating : null
+			});
 			const hasMore = hasPagination && anime.length > limit;
 
 			res.json({

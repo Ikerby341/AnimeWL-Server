@@ -395,6 +395,55 @@ async function attachEpisodeCounts(animes) {
     return animes;
 }
 
+function normalizeRatingRange({ minRating = null, maxRating = null } = {}) {
+    const min = Number(minRating);
+    const max = Number(maxRating);
+    const normalizedMin = Number.isFinite(min) ? Math.min(Math.max(min, 0), 5) : 0;
+    const normalizedMax = Number.isFinite(max) ? Math.min(Math.max(max, 0), 5) : 5;
+
+    return {
+        minRating: Math.min(normalizedMin, normalizedMax),
+        maxRating: Math.max(normalizedMin, normalizedMax)
+    };
+}
+
+async function getAnimeIdsByRatingRange(ratingRange = {}) {
+    const { minRating, maxRating } = normalizeRatingRange(ratingRange);
+    const isFullRange = minRating <= 0 && maxRating >= 5;
+
+    if (isFullRange) {
+        return null;
+    }
+
+    const { data, error } = await supabase
+        .from('valoracio')
+        .select('id_anime, puntuacio');
+
+    if (error) {
+        console.error('getAnimeIdsByRatingRange error', error);
+        throw error;
+    }
+
+    const ratingsByAnime = new Map();
+    for (const rating of data || []) {
+        if (!rating.id_anime) {
+            continue;
+        }
+
+        const current = ratingsByAnime.get(rating.id_anime) || { sum: 0, count: 0 };
+        current.sum += Number(rating.puntuacio) || 0;
+        current.count += 1;
+        ratingsByAnime.set(rating.id_anime, current);
+    }
+
+    return Array.from(ratingsByAnime.entries())
+        .filter(([, rating]) => {
+            const average = rating.count > 0 ? rating.sum / rating.count : 0;
+            return average >= minRating && average <= maxRating;
+        })
+        .map(([animeId]) => animeId);
+}
+
 export async function listAiringAnimes(limit = 7) {
     const numericLimit = Number(limit);
     let query = supabase
@@ -481,15 +530,21 @@ export async function listRandomUserRecommendedAnimes(limit = 5) {
     return attachEpisodeCounts(selectedAnimes.slice(0, resultLimit));
 }
 
-export async function listAnimes(genre = null, limit = null, offset = 0) {
+export async function listAnimes(genre = null, limit = null, offset = 0, filters = {}) {
     const numericLimit = Number(limit);
     const numericOffset = Number(offset);
     const hasPagination = Number.isFinite(numericLimit) && numericLimit > 0;
+    const ratingAnimeIds = await getAnimeIdsByRatingRange(filters);
+
+    if (ratingAnimeIds && ratingAnimeIds.length === 0) {
+        return [];
+    }
 
     let query = supabase
         .from('anime')
         .select(genre ? '*, anime_genere!inner(id_genere)' : '*')
-        .order('lastupdate', { ascending: false });
+        .order('lastupdate', { ascending: false })
+        .order('id_anime', { ascending: true });
 
     if (hasPagination) {
         const from = Number.isFinite(numericOffset) && numericOffset > 0 ? numericOffset : 0;
@@ -500,6 +555,10 @@ export async function listAnimes(genre = null, limit = null, offset = 0) {
 
     if (genre) {
         query = query.eq('anime_genere.id_genere', genre);
+    }
+
+    if (ratingAnimeIds) {
+        query = query.in('id_anime', ratingAnimeIds);
     }
 
     const { data: animeData, error } = await query;

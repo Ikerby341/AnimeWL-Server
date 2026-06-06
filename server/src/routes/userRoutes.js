@@ -677,7 +677,7 @@ export function createUserRouter() {
 		}
 
 		if (!result.data) {
-			return res.status(401).json({ success: false, error: 'Usuario o contraseÃ±a incorrectos.' });
+			return res.status(401).json({ success: false, error: 'Usuario o contraseña incorrectos.' });
 		}
 
 		const storedPassword = result.data.contrasenya;
@@ -685,7 +685,7 @@ export function createUserRouter() {
 		const attemptHash = scryptSync(password, salt, 64).toString('hex');
 
 		if (attemptHash !== hashed) {
-			return res.status(401).json({ success: false, error: 'Usuario o contraseÃ±a incorrectos.' });
+			return res.status(401).json({ success: false, error: 'Usuario o contraseña incorrectos.' });
 		}
 
 		req.session.user = {
