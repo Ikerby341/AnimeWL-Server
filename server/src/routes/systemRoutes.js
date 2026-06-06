@@ -1,11 +1,11 @@
 import { Router } from 'express';
 
-export function createSystemRouter() {
-	const router = Router();
+function crearRouterSistema() {
+  const router = Router();
 
-	router.get('/health', (req, res) => {
-		res.json({ success: true });
-	});
+  router.get('/health', (req, res) => {
+    res.json({ success: true });
+  });
 
-	return router;
-}
+  return router;
+}export { crearRouterSistema };

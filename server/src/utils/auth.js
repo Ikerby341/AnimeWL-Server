@@ -1,94 +1,94 @@
 import { createHmac, randomBytes, scryptSync } from 'crypto';
 
-export function hashPassword(password) {
-	const salt = randomBytes(16).toString('hex');
-	const hashed = scryptSync(password, salt, 64).toString('hex');
-	return `${salt}:${hashed}`;
+function crearHashContrasenya(password) {
+  const salt = randomBytes(16).toString('hex');
+  const hashed = scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hashed}`;
+}export { crearHashContrasenya };
+
+function crearTokenRestablimentContrasenya() {
+  return randomBytes(32).toString('base64url');
+}export { crearTokenRestablimentContrasenya };
+
+function crearHashTokenRestablimentContrasenya(token) {
+  const secret = process.env.RESET_PASSWORD_TOKEN_SECRET || process.env.SESSION_SECRET;
+  if (!secret) {
+    throw new Error('RESET_PASSWORD_TOKEN_SECRET or SESSION_SECRET must be configured');
+  }
+  return createHmac('sha256', secret).update(token).digest('hex');
+}export { crearHashTokenRestablimentContrasenya };
+
+function validarCorreuElectronic(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}export { validarCorreuElectronic };
+
+function codificarBase64Url(value) {
+  return Buffer.from(value).toString('base64url');
 }
 
-export function createResetPasswordToken() {
-	return randomBytes(32).toString('base64url');
+function decodificarBase64Url(value) {
+  return Buffer.from(value, 'base64url').toString('utf8');
 }
 
-export function hashResetPasswordToken(token) {
-	const secret = process.env.RESET_PASSWORD_TOKEN_SECRET || process.env.SESSION_SECRET;
-	if (!secret) {
-		throw new Error('RESET_PASSWORD_TOKEN_SECRET or SESSION_SECRET must be configured');
-	}
-	return createHmac('sha256', secret).update(token).digest('hex');
+function signarCarregaToken(payload) {
+  return createHmac('sha256', process.env.SESSION_SECRET).update(payload).digest('base64url');
 }
 
-export function validateEmail(email) {
-	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+function crearTokenAutenticacio(user) {
+  if (!process.env.SESSION_SECRET) return null;
 
-function base64UrlEncode(value) {
-	return Buffer.from(value).toString('base64url');
-}
+  const payload = codificarBase64Url(JSON.stringify({
+    user,
+    exp: Date.now() + 30 * 24 * 60 * 60 * 1000
+  }));
+  const signature = signarCarregaToken(payload);
+  return `${payload}.${signature}`;
+}export { crearTokenAutenticacio };
 
-function base64UrlDecode(value) {
-	return Buffer.from(value, 'base64url').toString('utf8');
-}
+function verificarTokenAutenticacio(token) {
+  if (!process.env.SESSION_SECRET || !token || !token.includes('.')) return null;
 
-function signTokenPayload(payload) {
-	return createHmac('sha256', process.env.SESSION_SECRET).update(payload).digest('base64url');
-}
+  const [payload, signature] = token.split('.');
+  const expectedSignature = signarCarregaToken(payload);
+  if (signature !== expectedSignature) return null;
 
-export function createAuthToken(user) {
-	if (!process.env.SESSION_SECRET) return null;
+  try {
+    const data = JSON.parse(decodificarBase64Url(payload));
+    if (!data.exp || Date.now() > data.exp || !data.user) return null;
+    return data.user;
+  } catch {
+    return null;
+  }
+}export { verificarTokenAutenticacio };
 
-	const payload = base64UrlEncode(JSON.stringify({
-		user,
-		exp: Date.now() + 30 * 24 * 60 * 60 * 1000
-	}));
-	const signature = signTokenPayload(payload);
-	return `${payload}.${signature}`;
-}
+function obtenirTokenBearer(req) {
+  const authHeader = req.headers.authorization || '';
+  return authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+}export { obtenirTokenBearer };
 
-export function verifyAuthToken(token) {
-	if (!process.env.SESSION_SECRET || !token || !token.includes('.')) return null;
+function obtenirIdUsuari(user) {
+  return user?.id_usuari || user?.id_usuario || user?.id_user || user?.id || null;
+}export { obtenirIdUsuari };
 
-	const [payload, signature] = token.split('.');
-	const expectedSignature = signTokenPayload(payload);
-	if (signature !== expectedSignature) return null;
+function obtenirUsuariTokenAutenticat(req) {
+  return verificarTokenAutenticacio(obtenirTokenBearer(req));
+}export { obtenirUsuariTokenAutenticat };
 
-	try {
-		const data = JSON.parse(base64UrlDecode(payload));
-		if (!data.exp || Date.now() > data.exp || !data.user) return null;
-		return data.user;
-	} catch {
-		return null;
-	}
-}
+function esMateixUsuariAutenticat(sessionUser, tokenUser) {
+  const sessionUserId = obtenirIdUsuari(sessionUser);
+  const tokenUserId = obtenirIdUsuari(tokenUser);
 
-export function getBearerToken(req) {
-	const authHeader = req.headers.authorization || '';
-	return authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-}
+  if (sessionUserId && tokenUserId) {
+    return sessionUserId === tokenUserId;
+  }
 
-export function getUserId(user) {
-	return user?.id_usuari || user?.id_usuario || user?.id_user || user?.id || null;
-}
+  if (sessionUser?.email && tokenUser?.email) {
+    return sessionUser.email === tokenUser.email;
+  }
 
-export function getAuthenticatedTokenUser(req) {
-	return verifyAuthToken(getBearerToken(req));
-}
+  if (sessionUser?.nom && tokenUser?.nom) {
+    return sessionUser.nom === tokenUser.nom;
+  }
 
-export function isSameAuthenticatedUser(sessionUser, tokenUser) {
-	const sessionUserId = getUserId(sessionUser);
-	const tokenUserId = getUserId(tokenUser);
-
-	if (sessionUserId && tokenUserId) {
-		return sessionUserId === tokenUserId;
-	}
-
-	if (sessionUser?.email && tokenUser?.email) {
-		return sessionUser.email === tokenUser.email;
-	}
-
-	if (sessionUser?.nom && tokenUser?.nom) {
-		return sessionUser.nom === tokenUser.nom;
-	}
-
-	return false;
-}
+  return false;
+}export { esMateixUsuariAutenticat };

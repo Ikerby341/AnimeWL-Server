@@ -16,7 +16,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Supabase URL and KEY must be provided via environment variables');
+  throw new Error('Supabase URL and KEY must be provided via environment variables');
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
