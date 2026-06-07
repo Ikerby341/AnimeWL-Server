@@ -66,6 +66,16 @@ El script executa primer les proves i després inicia `src/server.js`.
 - `server/src/config/db.js`: carrega `.env`, crea el client de Supabase i valida que existeixin `SUPABASE_URL` i `SUPABASE_KEY`.
 - `server/src/controllers/syncAnime.js`: sincronitza animes, gèneres i capítols des de Jikan cap a Supabase, amb control de rate limit i reintents.
 - `server/src/models`: capa d'accés a dades de Supabase.
+- `server/src/routes/`:
+  - `userRoutes.js`: router principal de usuaris que integra tots els sub-routers.
+  - `auth.routes.js`: autenticació (login, sessió, logout).
+  - `register.routes.js`: registre de nous usuaris.
+  - `passwordRecovery.routes.js`: recuperació de contrasenya.
+  - `userSettings.routes.js`: configuració de perfil (nom, contrasenya, email, foto).
+  - `favorites.routes.js`: gestió de favorits.
+  - `admin.routes.js`: rutas d'administració.
+  - `stats.routes.js`: estadístiques i perfil públic.
+- `server/src/helpers/userHelpers.js`: funcions auxiliars compartides per les rutes de usuari.
 - `server/vercel.json`: configura el desplegament de `src/server.js` com a funció de Vercel.
 - `server/package.json` i `server/package-lock.json`: dependències, scripts i versions bloquejades.
 
