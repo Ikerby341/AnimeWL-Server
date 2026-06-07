@@ -22,11 +22,13 @@ function crearRouterAnime() {
       const genre = typeof req.query.genre === 'string' && req.query.genre.trim() !== '' ? req.query.genre.trim() : null;
       const minRating = Number(req.query.minRating);
       const maxRating = Number(req.query.maxRating);
+      const status = typeof req.query.status === 'string' && req.query.status.trim() !== '' ? req.query.status.trim() : null;
       const hasPagination = Number.isFinite(limit) && limit > 0;
       const fetchLimit = hasPagination ? limit + 1 : null;
       const anime = await llistarAnimes(genre, fetchLimit, offset, {
         minRating: Number.isFinite(minRating) ? minRating : null,
-        maxRating: Number.isFinite(maxRating) ? maxRating : null
+        maxRating: Number.isFinite(maxRating) ? maxRating : null,
+        status: status
       });
       const hasMore = hasPagination && anime.length > limit;
 

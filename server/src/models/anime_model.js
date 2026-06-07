@@ -557,6 +557,10 @@ async function llistarAnimes(genre = null, limit = null, offset = 0, filters = {
     query = query.eq('anime_genere.id_genere', genre);
   }
 
+  if (filters.status && typeof filters.status === 'string' && filters.status.trim() !== '') {
+    query = query.eq('estat', filters.status.trim());
+  }
+
   if (ratingAnimeIds) {
     query = query.in('id_anime', ratingAnimeIds);
   }
